@@ -1,24 +1,27 @@
 #!/bin/bash
 # bm-vendor.sh - rebuild the Googlebook "vendor" partition for REAL hardware and write it onto the SSD (and the stick, if plugged in).
 # Only the vendor part of `super` and the flags of `vbmeta_a` are written. Nothing else is touched.
-# Run:  cd ~/gbos && sudo bash bm-vendor.sh        (takes ~10 minutes; run it after bm-nvme.sh so the SSD has the partitions)
+# Run:  cd ~/gbos && sudo bash scripts/bm-vendor.sh        (takes ~10 minutes; run it after bm-nvme.sh so the SSD has the partitions)
 #
 # What it changes compared with Google's original vendor image (stock graphics are kept):
-#  1. Adds firmware from this Ubuntu: Intel GPU (adlp DMC/GuC/HuC), Wi-Fi (BE200), Bluetooth, Ethernet.
+#  1. Adds firmware from this Ubuntu (the files listed in bm.conf): Intel GPU, Wi-Fi, Bluetooth, Ethernet.
 #  2. Replaces the parts that need Google's security chip (Trusty/TPM) with software ones.
 #  3. Adds the sound setup for the Realtek ALC256 codec and stops services that crash-loop without Google's hardware.
 #  4. Switches verification off in vbmeta_a (run bm-sign.sh afterwards if you want verified/locked boot).
 set -euo pipefail
 GBOS=${GBOS:-$PWD}
-SERIAL="${1:-YOUR_STICK_SERIAL}"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
+SERIAL="${1:-${STICK_SERIAL:-none}}"
 cd "$GBOS"
 [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
+[ -n "${SSD_SERIAL:-}" ] || { echo "SSD_SERIAL is not set: run  bash scripts/bm-configure.sh  first (it detects your drives and hardware)"; exit 1; }
 for t in mkfs.erofs dump.erofs getfattr setfattr secilc zstd python3 udevadm lsblk xxd readelf mount; do
   command -v $t >/dev/null || { echo "missing tool: $t   (try: sudo apt install erofs-utils attr secilc zstd xxd binutils)"; exit 1; }; done
 CF=work/cuttlefish; W=work/bm_tmp; R=work/bm_vendor_root; M=work/bm_mnt
 for f in super/vendor_a.img super/system_a.img super/system_ext_a.img super/product_a.img \
          $CF/security/rust_nonsecure_payload.img $CF/security/boot-service.default \
-         $CF/security/com.android.hardware.gatekeeper.nonsecure.apex unpack_cf_x86.py; do
+         $CF/security/com.android.hardware.gatekeeper.nonsecure.apex "$LIB/unpack_cf_x86.py"; do
   [ -e "$f" ] || { echo "missing $GBOS/$f"; exit 1; }; done
 
 cleanup() { for m in vendor sysa sysext product; do umount "$M/$m" 2>/dev/null || true; done; }
@@ -94,18 +97,23 @@ addglob() {  # $1 = directory, remaining = name prefixes; every file starting wi
   done
 }
 [ -d "$FWSRC" ] || { echo "$FWSRC missing"; exit 1; }
-addglob i915 adlp_dmc adlp_guc_70 tgl_huc tgl_guc_70
-addglob intel ibt-0190-0291
-addglob rtl_nic rtl8168h-2
+# which firmware to copy: bm.conf (made by bm-configure.sh from what YOUR Ubuntu actually loads). The defaults are this project's test laptop.
+FW_GPU=${FW_GPU:-"i915:adlp_dmc i915:adlp_guc_70 i915:tgl_huc i915:tgl_guc_70"}
+FW_BT=${FW_BT:-"ibt-0190-0291"}
+FW_ETH=${FW_ETH:-"rtl8168h-2"}
+FW_WIFI_BASES=${FW_WIFI_BASES:-"iwlwifi-bz-b0-fm-c0 iwlwifi-gl-c0-fm-c0"}
+for e in $FW_GPU; do addglob "${e%%:*}" "${e#*:}"; done
+for p in $FW_BT; do addglob intel "$p"; done
+for p in $FW_ETH; do addglob rtl_nic "$p"; done
 # Wi-Fi: the newest few versions (the driver loads the highest one it understands) + the pnvm file.
-for base in iwlwifi-bz-b0-fm-c0 iwlwifi-gl-c0-fm-c0; do
+for base in $FW_WIFI_BASES; do
   for f in $( (ls "$FWSRC"; ls "$FWEXTRA" 2>/dev/null) | grep -E "^$base(-c?[0-9]+)?\.ucode(\.zst)?$" | sed 's/\.zst$//' | sort -uV | tail -7); do addfw "$f" || true; done
   for f in $( (ls "$FWSRC"; ls "$FWEXTRA" 2>/dev/null) | grep -E "^$base\.pnvm(\.zst)?$" | sed 's/\.zst$//' | sort -u); do addfw "$f" || true; done
   top=$(ls "$FWDST" | grep -E "^$base-c(10[0-3])\.ucode$" | sort -V | tail -1)   # link target = newest file the driver can plausibly take (<= c103)
   if [ -n "$top" ]; then for n in 104 105; do [ -e "$FWDST/$base-c$n.ucode" ] || { ln -s "$top" "$FWDST/$base-c$n.ucode"; setfattr -h -n security.selinux -v "$FWL" "$FWDST/$base-c$n.ucode"; echo "  + $base-c$n.ucode -> $top (symlink, experiment)"; }; done; fi
 done
-echo "  firmware now in vendor: $(ls "$FWDST/i915" | tr '\n' ' ')"
-ls "$FWDST/i915" | grep -q adlp_guc || echo "  WARNING: no adlp GuC firmware found - the GPU driver will probably fail"
+echo "  GPU firmware now in vendor: $(ls "$FWDST/i915" "$FWDST/xe" 2>/dev/null | tr '\n' ' ')"
+ls "$FWDST/i915" "$FWDST/xe" 2>/dev/null | grep -q guc || echo "  WARNING: no GPU GuC firmware found - the GPU driver will probably fail (run scripts/bm-configure.sh and check FW_GPU in bm.conf)"
 
 echo "== 4. software replacements for the security chip (same as the VM build)"
 install -o 0 -g 2000 -m 0755 $W/km/keymint "$R/bin/hw/android.hardware.security.keymint-service.vm"
@@ -194,7 +202,7 @@ setlabel "$(label_of "$R/etc/vintf/manifest")" "$R/etc/vintf/manifest/vm-shareds
 
 # Graphics stays stock (ANGLE on Vulkan/ANV, minigbm, hwc3-drm). One safety switch: hwc3-drm rejects display
 # planes that lack the new KMS COLOR_PIPELINE property; turning that feature off is harmless if they have it.
-for BP in "$R/build.prop"; do sed -i -E '/^vendor\.hwc\.drm\.enable_color_pipeline=/d' "$BP"; done
+sed -i -E '/^vendor\.hwc\.drm\.enable_color_pipeline=/d' "$R/build.prop"
 printf '\n# bare metal: do not require KMS COLOR_PIPELINE\nvendor.hwc.drm.enable_color_pipeline=false\n' >> "$R/build.prop"
 
 echo "== 5. logging to the stick (raw partitions gbkmsg + gblog)"
@@ -409,7 +417,7 @@ for f in "$R/etc/audio/HDA_Intel_PCH/audio_config.xml" "$R/etc/audio/for_all_boa
   [ -f "$f" ] || continue
   sed -e "s|@JK_HP@|$JK_HP|g" -e "s|@JK_MIC@|$JK_MIC|g" -e "s|@JK_H1@|$JK_H1|g" -e "s|@JK_H2@|$JK_H2|g" -e "s|@JK_H3@|$JK_H3|g" "$f" > "$f.tmp" && cat "$f.tmp" > "$f" && rm -f "$f.tmp"
 done
-# LEAN is ON by default now (LEAN=0 sudo -E bash bm-vendor.sh keeps the diagnostics): drops the diagnostics (screenshots, SurfaceFlinger dumps, perf sampler, 4-second log dumps) for a faster, quieter system
+# LEAN is ON by default now (LEAN=0 sudo -E bash scripts/bm-vendor.sh keeps the diagnostics): drops the diagnostics (screenshots, SurfaceFlinger dumps, perf sampler, 4-second log dumps) for a faster, quieter system
 if [ "${LEAN:-1}" = 1 ]; then
   rm -f "$R/etc/init/bm-shot.rc" "$R/etc/init/bm-perf.rc" "$R/etc/bm-perf.sh" "$R/etc/init/bm-log.rc"
   echo "  LEAN build: diagnostics services removed (no logs will be saved to the log partitions)"
@@ -491,7 +499,7 @@ truncate -s "$SIZE" work/vendor_bm.img
 echo "new vendor $NEW bytes fits partition area $SIZE"
 
 echo "== 7. write the vendor to the SSD (and the stick, if plugged in)"
-SSD_SERIAL=${SSD_SERIAL:-YOUR_SSD_SERIAL}; SSDSUP=""; SSDVBM=""
+SSDSUP=""; SSDVBM=""
 for d in /sys/block/nvme*n*; do
   [ -e "$d" ] || continue; n=/dev/$(basename "$d")
   [ "$(lsblk -dno SERIAL "$n" | tr -d ' ')" = "$SSD_SERIAL" ] || continue
@@ -501,7 +509,7 @@ for d in /sys/block/nvme*n*; do
   done
 done
 [ -n "$SSDSUP" ] && [ -n "$SSDVBM" ] || { echo "No Googlebook super/vbmeta_a on the SSD (serial $SSD_SERIAL) - stopping, nothing was written"; exit 1; }
-VOFF=$(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions as s;print(s(sys.argv[1])["vendor_a"])' "$SSDSUP" "$GBOS")
+VOFF=$(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions as s;print(s(sys.argv[1])["vendor_a"])' "$SSDSUP" "$LIB")
 write_vendor() {  # $1 = super dev, $2 = vbmeta dev
   [ "$(dd if="$1" bs=1 skip=$((VOFF+1024)) count=4 status=none | xxd -p)" = "e2e1f5e0" ] || { echo "no EROFS at vendor offset on $1 - skipping it"; return 1; }
   [ "$(dd if="$2" bs=1 count=4 status=none)" = "AVB0" ] || { echo "vbmeta_a on $2 is not AVB - skipping it"; return 1; }
@@ -515,4 +523,4 @@ write_vendor "$SSDSUP" "$SSDVBM" || exit 1
 if [ -n "$SUPER_DEV" ]; then write_vendor "$SUPER_DEV" "$VBM_DEV" || echo "  (stick copy not updated)"; fi
 echo
 echo "DONE. Vendor written to the SSD ($SSDSUP) at offset $VOFF; verification disabled in vbmeta_a."
-echo "Next: sudo bash bm-boot.sh (if kernel options changed), then reboot and pick Googlebook OS in the GRUB menu. The stick is not needed."
+echo "Next: sudo bash scripts/bm-boot.sh (if kernel options changed), then reboot and pick Googlebook OS in the GRUB menu. The stick is not needed."

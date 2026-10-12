@@ -4,11 +4,14 @@
 # This ERASES Android's user data (apps, accounts, settings, files) AND removes the old data-encryption key from the small
 # 'metadata' partition (a backup of that partition is saved first). Touches only Android's partitions on the SSD with serial
 # $SSD_SERIAL. Ubuntu, Windows, the Data drive and the other Android partitions are NOT touched.
-# Run:  cd ~/gbos && sudo bash bm-reset-data.sh
+# Run:  cd ~/gbos && sudo bash scripts/bm-reset-data.sh
 set -euo pipefail
 GBOS=${GBOS:-$PWD}
-SERIAL=${SSD_SERIAL:-YOUR_SSD_SERIAL}; N=${USERDATA_PART:-5}
-[ "$(id -u)" = 0 ] || { echo "run with: sudo bash bm-reset-data.sh"; exit 1; }
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
+SERIAL=${SSD_SERIAL:-}; N=${USERDATA_PART:-5}
+[ "$(id -u)" = 0 ] || { echo "run with: sudo bash scripts/bm-reset-data.sh"; exit 1; }
+[ -n "$SERIAL" ] || { echo "SSD_SERIAL is not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
 DEV=$(lsblk -dn -o NAME,SERIAL | awk -v s="$SERIAL" '$2==s{print "/dev/"$1; exit}')
 [ -n "$DEV" ] || { echo "SSD with serial $SERIAL not found"; exit 1; }
 P="${DEV}p$N"

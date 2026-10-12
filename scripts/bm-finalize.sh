@@ -7,7 +7,7 @@
 #   3. does NOT touch your default boot entry or menu time (Ubuntu/Windows menu stays as it is).
 #      Only if you WANT Googlebook OS to start by itself: MAKE_DEFAULT=1 ; shorter menu time: GRUB_TIMEOUT=3
 # It writes NOTHING to the Android disk, so your Android data is untouched.
-# Run:   cd ~/gbos && sudo bash bm-finalize.sh          Safe to run again.
+# Run:   cd ~/gbos && sudo bash scripts/bm-finalize.sh          Safe to run again.
 # Undo the default:  sudo cp /etc/default/grub.bak-gbos /etc/default/grub && sudo update-grub
 set -euo pipefail
 GB=${GB_DIR:-/boot/gbos}
@@ -16,7 +16,7 @@ DEF=${DEFAULT_FILE:-/etc/default/grub}
 DRYRUN=${DRYRUN:-}
 [ -n "$DRYRUN" ] || [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
 for f in kernel initrd.img initrd-locked.img; do
-  [ -s "$GB/$f" ] || { echo "$GB/$f is missing. Run  sudo bash bm-locked-test.sh  first."; exit 1; }
+  [ -s "$GB/$f" ] || { echo "$GB/$f is missing. Run  sudo bash scripts/bm-locked-test.sh  first."; exit 1; }
 done
 
 # ---- 1. kernel options: take them from the existing menu (saved once, so re-running is safe)
@@ -46,7 +46,7 @@ ent() { # title initrd args indent
   ent "Googlebook OS" initrd-locked.img "$MAIN" ""
   echo 'submenu "Googlebook OS - other options" {'
   ent "Locked, kernel messages on screen (for troubleshooting)" initrd-locked.img "$LOUD" "  "
-  ent "UNLOCKED (orange) - needs a data reset to switch (sudo bash bm-reset-data.sh)" initrd.img "$MAIN" "  "
+  ent "UNLOCKED (orange) - needs a data reset to switch (sudo bash scripts/bm-reset-data.sh)" initrd.img "$MAIN" "  "
   [ -s "$GB/initrd-verified.img" ] && ent "Verified boot but unlocked - needs a data reset to switch" initrd-verified.img "$MAIN" "  "
   echo '}'
   echo 'GRUBEOF'

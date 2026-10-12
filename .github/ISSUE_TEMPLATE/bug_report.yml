@@ -1,0 +1,47 @@
+name: Bug report
+description: A script failed, did the wrong thing, or Googlebook OS misbehaves.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check [Troubleshooting](https://github.com/paulst8/googlebook-asus/blob/main/docs/TROUBLESHOOTING.md) first. **Never paste your signing key (`avb.pem`).**
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where did it go wrong?
+      options:
+        - bm-configure / bm-check
+        - bm-prepare (unpacking)
+        - bm-usb
+        - bm-nvme
+        - bm-wifi-fw
+        - bm-vendor
+        - bm-boot / bm-ubuntu-grub / boot menu
+        - Locked boot (bm-sign, bm-locked-test, bm-reset-data)
+        - Googlebook OS itself (after it boots)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Last lines of the output
+      render: text
+  - type: input
+    id: laptop
+    attributes:
+      label: Laptop and Ubuntu version
+      placeholder: "ASUS TUF F16, Ubuntu 24.04"
+  - type: textarea
+    id: conf
+    attributes:
+      label: Your bm.conf (optional)
+      description: Remove the SSD_SERIAL and STICK_SERIAL lines if you don't want to share them.
+      render: text

@@ -1,0 +1,36 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    name: Script checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: for f in scripts/*.sh; do bash -n "$f" || exit 1; done
+      - name: ShellCheck (errors only)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=error scripts/*.sh
+      - name: Python syntax
+        run: python3 -m py_compile scripts/lib/*.py
+      - name: No hard-coded personal or hardware data
+        run: |
+          if grep -rnIE 'YOUR_(SSD|STICK)_SERIAL|/home/[a-z]+/|BEGIN [A-Z ]*PRIVATE KEY' scripts docs README.md; then
+            echo "Found hard-coded paths, placeholders or keys"; exit 1
+          fi
+      - name: bm-configure on a fake laptop
+        run: |
+          mkdir -p /tmp/fake/bin /tmp/fake/proj
+          printf '#!/bin/bash\ncase "$*" in\n *"-dn -P"*) echo '"'"'NAME="nvme0n1" SERIAL="SSD1" SIZE="1T" TRAN="nvme" MODEL="X"'"'"'; echo '"'"'NAME="sda" SERIAL="USB1" SIZE="64G" TRAN="usb" MODEL="Y"'"'"';; esac\n' > /tmp/fake/bin/lsblk
+          chmod +x /tmp/fake/bin/lsblk
+          PATH=/tmp/fake/bin:$PATH GBOS=/tmp/fake/proj SSD_SERIAL=SSD1 STICK_SERIAL=USB1 bash scripts/bm-configure.sh
+          grep -q '^SSD_SERIAL="SSD1"' /tmp/fake/proj/bm.conf

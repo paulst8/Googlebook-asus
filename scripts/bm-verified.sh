@@ -1,13 +1,15 @@
 #!/bin/bash
 # bm-verified.sh - add a SECOND Googlebook OS entry to Ubuntu's boot menu: "verified boot (testing)".
-# Stage 4 of the verified-boot plan. Run it AFTER  sudo bash bm-sign.sh  (and after every re-run of bm-vendor.sh + bm-sign.sh).
+# Stage 4 of the verified-boot plan. Run it AFTER  sudo bash scripts/bm-sign.sh  (and after every re-run of bm-vendor.sh + bm-sign.sh).
 # It copies the boot settings Ubuntu already uses (/boot/gbos/initrd.img), and adds what a real bootloader would pass to Android:
 # the fingerprint (digest) of the signed vbmeta_a that is on the SSD, its size, and the dm-verity mode "enforcing".
 # The boot state label stays orange/unlocked on purpose (nothing before Android checks anything yet - see README), and
 # your normal entry is NOT changed, so you can always fall back to it.
-# Run:    cd ~/gbos && sudo bash bm-verified.sh          Undo:  sudo rm /etc/grub.d/41_googlebook_verified /boot/gbos/initrd-verified.img && sudo update-grub
+# Run:    cd ~/gbos && sudo bash scripts/bm-verified.sh          Undo:  sudo rm /etc/grub.d/41_googlebook_verified /boot/gbos/initrd-verified.img && sudo update-grub
 set -euo pipefail
 GBOS=${GBOS:-$PWD}; cd "$GBOS"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 DRYRUN=${DRYRUN:-}
 GB=${GB_DIR:-/boot/gbos}
 [ -z "$DRYRUN" ] && { [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }; }
@@ -16,11 +18,11 @@ GB=${GB_DIR:-/boot/gbos}
 # ---- the signed vbmeta_a that is really on the SSD (so the numbers always match what Android will read)
 if [ -n "${VBMETA_IMG:-}" ]; then VB="$VBMETA_IMG"; else VB=$( { blkid -t PARTLABEL=vbmeta_a -o device | grep nvme; blkid -t PARTLABEL=vbmeta_a -o device; } | head -1 ); fi
 [ -n "$VB" ] || { echo "vbmeta_a partition not found"; exit 1; }
-PUB=$(python3 avb/avbtool.py info_image --image "$VB" | sed -n 's/^Public key (sha1): *//p')
-FLG=$(python3 avb/avbtool.py info_image --image "$VB" | sed -n 's/^Flags: *//p' | head -1)
-[ "$FLG" = "0" ] || { echo "vbmeta_a has flags=$FLG (verification still disabled) - run  sudo bash bm-sign.sh  first"; exit 1; }
-[ "$PUB" != "76b0c125b33c7757e0695f02e820553890f57585" ] || { echo "vbmeta_a is still signed by Google, not by your key - run  sudo bash bm-sign.sh  first"; exit 1; }
-DIG=$(python3 avb/avbtool.py calculate_vbmeta_digest --image "$VB" --hash_algorithm sha256)
+PUB=$(python3 "$LIB/avbtool.py" info_image --image "$VB" | sed -n 's/^Public key (sha1): *//p')
+FLG=$(python3 "$LIB/avbtool.py" info_image --image "$VB" | sed -n 's/^Flags: *//p' | head -1)
+[ "$FLG" = "0" ] || { echo "vbmeta_a has flags=$FLG (verification still disabled) - run  sudo bash scripts/bm-sign.sh  first"; exit 1; }
+[ "$PUB" != "76b0c125b33c7757e0695f02e820553890f57585" ] || { echo "vbmeta_a is still signed by Google, not by your key - run  sudo bash scripts/bm-sign.sh  first"; exit 1; }
+DIG=$(python3 "$LIB/avbtool.py" calculate_vbmeta_digest --image "$VB" --hash_algorithm sha256)
 SZ=$(python3 - "$VB" <<'PY'
 import struct, sys
 d = open(sys.argv[1], 'rb').read(256)

@@ -5,11 +5,12 @@
 # Put these in the project folder first:
 #   lapis-recovery.zip                              Google's recovery image (see README)
 #   aosp_cf_x86_64_only_phone-img-16373615.zip      Android Cuttlefish test image (see README)
-# Also needed in the folder: bm_gpt.py, unpack_cf_x86.py (both are in this repo).
-# Run:  cd ~/gbos && bash bm-prepare.sh
+# Run:  cd ~/gbos && bash scripts/bm-prepare.sh
 # Result: lapis.bin  gb.raw  parts/  unpacked/  super/  work/cuttlefish/  lpunpack.py
 set -euo pipefail
 GBOS=${GBOS:-$PWD}; cd "$GBOS"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 ZIP=lapis-recovery.zip; CFZIP=aosp_cf_x86_64_only_phone-img-16373615.zip
 
 # ---- 1. tools
@@ -20,7 +21,7 @@ if [ -n "$miss" ]; then
   echo "Install them with:  sudo apt install python3 unzip curl lz4 erofs-utils e2fsprogs mkbootimg attr binutils cpio xxd zstd secilc gdisk parted rsync dosfstools grub-efi-amd64-bin"
   exit 1
 fi
-for f in "$ZIP" "$CFZIP" bm_gpt.py unpack_cf_x86.py; do [ -e "$f" ] || { echo "missing $GBOS/$f - see the README"; exit 1; }; done
+for f in "$ZIP" "$CFZIP" "$LIB/bm_gpt.py" "$LIB/unpack_cf_x86.py"; do [ -e "$f" ] || { echo "missing $f - see docs/SETUP.md"; exit 1; }; done
 
 # ---- 2. Google's image: unzip to lapis.bin (never modified afterwards)
 if [ ! -s lapis.bin ]; then
@@ -32,7 +33,7 @@ else echo "[1/6] lapis.bin already there"; fi
 
 # ---- 3. partition table -> byte offsets
 PLAN=$(mktemp); trap 'rm -f "$PLAN"' EXIT
-python3 -I bm_gpt.py plan lapis.bin > "$PLAN"
+python3 -I "$LIB/bm_gpt.py" plan lapis.bin > "$PLAN"
 part() { awk -F'\t' -v n="$1" '$6==n{print $2, $3-$2+1}' "$PLAN"; }   # prints: start_sector sector_count
 
 # ---- 4. boot-related partitions -> parts/ and unpacked/
@@ -60,7 +61,7 @@ else echo "[3/6] super/ already unpacked"; fi
 # ---- 6. Cuttlefish parts (software security + graphics) -> work/cuttlefish/
 if [ ! -s work/cuttlefish/manifest.json ]; then
   echo "[4/6] unpacking Cuttlefish parts"
-  python3 -I unpack_cf_x86.py "$CFZIP" work/cuttlefish
+  python3 -I "$LIB/unpack_cf_x86.py" "$CFZIP" work/cuttlefish
 else echo "[4/6] work/cuttlefish already there"; fi
 
 # ---- 7. working copy of the disk image (sparse, about 19 GB on disk)
@@ -73,4 +74,4 @@ for f in unpacked/boot_a/kernel unpacked/init_boot_a/ramdisk unpacked/vendor_boo
          super/vendor_a.img super/system_a.img super/system_ext_a.img super/product_a.img \
          work/cuttlefish/security/rust_nonsecure_payload.img work/cuttlefish/security/boot-service.default gb.raw; do
   [ -s "$f" ] || { echo "  MISSING $f"; ok=0; }; done
-[ $ok = 1 ] && echo "All set. Next: bash bm-check.sh   (then the steps in the README)" || { echo "Something is missing - see above."; exit 1; }
+[ $ok = 1 ] && echo "All set. Next: bash scripts/bm-check.sh   (then the steps in the README)" || { echo "Something is missing - see above."; exit 1; }

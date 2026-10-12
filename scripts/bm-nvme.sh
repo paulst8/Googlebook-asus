@@ -1,23 +1,26 @@
 #!/bin/bash
-# bm-nvme.sh - put Googlebook OS's partitions onto the FREE SPACE of your Ubuntu SSD (the SSD with serial YOUR_SSD_SERIAL).
+# bm-nvme.sh - put Googlebook OS's partitions onto the FREE SPACE of your Ubuntu SSD (the SSD chosen in bm-configure.sh).
 #
 # SAFETY: it only ADDS new partitions inside unallocated space. It never changes, formats, moves or resizes an
 # existing partition (Ubuntu, Data, the EFI partition). It saves a backup of the disk's partition table first.
 # It refuses to run unless the disk has the serial number you set and is an NVMe disk.
 # The USB stick stays as the boot menu (it holds the kernel) until bm-ubuntu-grub.sh; the Android partitions are copied to the SSD.
 #
-# Run:  DRYRUN=1 sudo bash bm-nvme.sh      (shows the plan, writes nothing)
-#       sudo bash bm-nvme.sh               (does it, after you type the serial number)
+# Run:  DRYRUN=1 sudo bash scripts/bm-nvme.sh      (shows the plan, writes nothing)
+#       sudo bash scripts/bm-nvme.sh               (does it, after you type the serial number)
 set -euo pipefail
 GBOS=${GBOS:-$PWD}
-SERIAL=${SERIAL:-YOUR_SSD_SERIAL}
-STICK_SERIAL=${STICK_SERIAL:-YOUR_STICK_SERIAL}
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
+SERIAL=${SERIAL:-${SSD_SERIAL:-}}
+STICK_SERIAL=${STICK_SERIAL:-}
+[ -n "$SERIAL" ] && [ -n "$STICK_SERIAL" ] || { echo "Drive serials are not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
 USERDATA_GIB=${USERDATA_GIB:-40}       # wanted size of the Android user-data partition (shrinks automatically if space is short)
 MIN_USERDATA_GIB=16
 DRYRUN=${DRYRUN:-}
 [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
 for t in sgdisk parted partx python3 udevadm lsblk blockdev dd; do command -v $t >/dev/null || { echo "missing tool: $t"; exit 1; }; done
-for f in lapis.bin gb.raw bm_gpt.py; do [ -e "$GBOS/$f" ] || { echo "missing $GBOS/$f"; exit 1; }; done
+for f in lapis.bin gb.raw; do [ -e "$GBOS/$f" ] || { echo "missing $GBOS/$f - run scripts/bm-prepare.sh first"; exit 1; }; done
 
 # ---------------------------------------------------------------- find the SSD by serial number (names swap between boots)
 DEV=""
@@ -42,7 +45,7 @@ echo "USB stick: $STICK"
 
 # ---------------------------------------------------------------- the partition plan from the pristine image + the biggest free gap
 PLAN=$(mktemp); trap 'rm -f "$PLAN"' EXIT
-python3 "$GBOS/bm_gpt.py" plan "$GBOS/lapis.bin" > "$PLAN"
+python3 "$LIB/bm_gpt.py" plan "$GBOS/lapis.bin" > "$PLAN"
 FREEFILE=$(mktemp); parted -m -s "$DEV" unit s print free > "$FREEFILE"
 EXIST=$(sgdisk -p "$DEV" | awk '/^ +[0-9]+ /{print $1}' | sort -n | tail -1); EXIST=${EXIST:-0}
 SECTS=$(blockdev --getsz "$DEV")
@@ -156,4 +159,4 @@ for item in $IDXMAP; do
 done
 echo
 echo "DONE. Android's partitions are on $DEV (serial $SERIAL)."
-echo "Next:  sudo bash bm-boot.sh      (points the boot menu on the stick at the SSD)"
+echo "Next:  sudo bash scripts/bm-boot.sh      (points the boot menu on the stick at the SSD)"

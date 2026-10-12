@@ -2,8 +2,8 @@
 # bm-ubuntu-grub.sh - put Googlebook OS into Ubuntu's own GRUB menu so the USB stick is NOT needed to boot it.
 # Android itself already lives on the SSD; the stick only held the kernel, the ramdisk and a boot menu. This copies
 # those two files (about 60 MB) into Ubuntu's /boot/gbos and adds the same menu entries to Ubuntu's GRUB.
-# Needs the stick plugged in ONE last time (to copy from). Re-run it (stick plugged in) after every  sudo bash bm-boot.sh
-# Run:  cd ~/gbos && sudo bash bm-ubuntu-grub.sh      Undo:  sudo rm -rf /boot/gbos /etc/grub.d/40_googlebook && sudo update-grub
+# Needs the stick plugged in ONE last time (to copy from). Re-run it (stick plugged in) after every  sudo bash scripts/bm-boot.sh
+# Run:  cd ~/gbos && sudo bash scripts/bm-ubuntu-grub.sh      Undo:  sudo rm -rf /boot/gbos /etc/grub.d/40_googlebook && sudo update-grub
 set -euo pipefail
 [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
 ESPDEV=$(blkid -L GBOS-ESP || true); [ -b "${ESPDEV:-}" ] || { echo "Plug the stick in (GBOS-ESP not found)."; exit 1; }
