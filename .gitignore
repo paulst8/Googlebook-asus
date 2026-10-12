@@ -1,0 +1,14 @@
+*.pem
+*.img
+*.bin
+*.raw
+*.zip
+lapis*
+work/
+parts/
+super/
+unpacked/
+fw-extra/
+backup-*
+nvme-*gpt-backup*
+__pycache__/
