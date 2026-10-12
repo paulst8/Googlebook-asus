@@ -54,7 +54,7 @@ sudo apt install git python3 unzip curl lz4 erofs-utils e2fsprogs mkbootimg attr
 **Get the scripts** (the folder will also hold the large working files):
 
 ```bash
-git clone https://github.com/paulst8/googlebook-asus ~/gbos
+git clone https://github.com/paulst8/Googlebook-asus ~/gbos
 cd ~/gbos
 ```
 
