@@ -5,7 +5,7 @@ Thanks for helping. The most useful contribution is a **[hardware report](../../
 ## Reporting problems
 
 - Use the [bug report](../../issues/new?template=bug_report.yml) form. Say which script failed and paste its last lines.
-- Questions and ideas that aren't bugs: use [Discussions](../../discussions) if they are enabled, otherwise an issue.
+- Questions and ideas that aren't bugs: use [Discussions](../../discussions).
 - Do **not** post your signing key (`avb.pem`), or any Google image, in an issue.
 
 ## Changing the scripts
