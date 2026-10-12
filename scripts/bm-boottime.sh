@@ -1,7 +1,7 @@
 #!/bin/bash
 # bm-boottime.sh - shows where Googlebook OS spends its boot time. Changes nothing.
 # Run it in Ubuntu or in the Googlebook Linux terminal after the system is up, with adb connected to the laptop:
-#   adb connect <laptop-ip:port>   (Settings > Developer options > Wireless debugging), then:  bash bm-boottime.sh
+#   adb connect <laptop-ip:port>   (Settings > Developer options > Wireless debugging), then:  bash scripts/bm-boottime.sh
 # Include the whole output when you open an issue.
 S="adb ${ADB_SERIAL:+-s $ADB_SERIAL}"
 $S shell '

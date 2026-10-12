@@ -3,8 +3,10 @@
 # Only changes the userdata partition's END. Ubuntu, Windows data and the ESP are not touched.
 # WIPES Android's user data (first-boot setup runs again). Leaves 1 GiB free before the next partition.
 set -e
-[ "$(id -u)" = 0 ] || { echo "run with: sudo bash bm-grow.sh"; exit 1; }
-SERIAL=${SSD_SERIAL:-YOUR_SSD_SERIAL}; N=${USERDATA_PART:-5}
+GBOS=${GBOS:-$PWD}; [ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
+[ "$(id -u)" = 0 ] || { echo "run with: sudo bash scripts/bm-grow.sh"; exit 1; }
+SERIAL=${SSD_SERIAL:-}; N=${USERDATA_PART:-5}
+[ -n "$SERIAL" ] || { echo "SSD_SERIAL is not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
 DEV=$(lsblk -dn -o NAME,SERIAL | awk -v s="$SERIAL" '$2==s{print "/dev/"$1; exit}')
 [ -n "$DEV" ] || { echo "SSD with serial $SERIAL not found"; exit 1; }
 P="${DEV}p$N"

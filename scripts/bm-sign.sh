@@ -5,19 +5,22 @@
 #   2. builds a NEW vbmeta_a (the signed list of partition fingerprints) signed with your key,
 #   3. writes both back, and prints the numbers the boot settings need (stage 4).
 # Touches ONLY the vendor area inside 'super' and 'vbmeta_a' on the SSD with serial $SSD_SERIAL. It saves the old vbmeta_a first.
-# Re-run it after EVERY  sudo bash bm-vendor.sh  (that script switches verification off again).
-# Run:    cd ~/gbos && sudo bash bm-sign.sh              Test without writing anything:  DRYRUN=1 bash bm-sign.sh
-# Undo:   sudo bash bm-vendor.sh   (rebuilds the vendor and switches verification off again, as before)
+# Re-run it after EVERY  sudo bash scripts/bm-vendor.sh  (that script switches verification off again).
+# Run:    cd ~/gbos && sudo bash scripts/bm-sign.sh              Test without writing anything:  DRYRUN=1 bash scripts/bm-sign.sh
+# Undo:   sudo bash scripts/bm-vendor.sh   (rebuilds the vendor and switches verification off again, as before)
 set -euo pipefail
 GBOS=${GBOS:-$PWD}; cd "$GBOS"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 DRYRUN=${DRYRUN:-}
-SSD_SERIAL=${SSD_SERIAL:-YOUR_SSD_SERIAL}
-AVBTOOL="python3 $GBOS/avb/avbtool.py"
+SSD_SERIAL=${SSD_SERIAL:-}
+AVBTOOL="python3 $LIB/avbtool.py"
 UH=$( [ -n "${SUDO_USER:-}" ] && getent passwd "$SUDO_USER" | cut -d: -f6 || echo "$HOME" )
 KEY=${AVB_KEY:-$UH/gbos-avb-key/avb.pem}
+[ -z "$DRYRUN" ] && [ -z "$SSD_SERIAL" ] && { echo "SSD_SERIAL is not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
 [ -z "$DRYRUN" ] && { [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }; }
 [ -f "$KEY" ] || { echo "Signing key not found: $KEY  (create it first, see the README)"; exit 1; }
-[ -f avb/avbtool.py ] || { echo "avb/avbtool.py missing"; exit 1; }
+[ -f "$LIB/avbtool.py" ] || { echo "$LIB/avbtool.py missing"; exit 1; }
 for f in parts/boot_a.img parts/init_boot_a.img parts/vendor_boot_a.img parts/vbmeta_a.img super/system_a.img super/system_ext_a.img super/product_a.img super/system_dlkm_a.img super/vendor_dlkm_a.img; do
   [ -f "$f" ] || { echo "missing $GBOS/$f"; exit 1; }; done
 OUT=work/sign-out; mkdir -p "$OUT"; rm -f "$OUT"/*
@@ -35,7 +38,7 @@ if [ -z "$DRYRUN" ]; then
     done
   done
   [ -n "$SSDSUP" ] && [ -n "$SSDVBM" ] || { echo "No Googlebook super/vbmeta_a on the SSD (serial $SSD_SERIAL) - nothing was written"; exit 1; }
-  VOFF=$(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions as s;print(s(sys.argv[1])["vendor_a"])' "$SSDSUP" "$GBOS")
+  VOFF=$(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions as s;print(s(sys.argv[1])["vendor_a"])' "$SSDSUP" "$LIB")
   dd if="$SSDSUP" of="$OUT/vendor.raw" bs=4M iflag=skip_bytes,count_bytes skip=$VOFF count=$SLOT status=none
 else
   cp work/vendor_bm.img "$OUT/vendor.raw"; echo "(dry run: using work/vendor_bm.img, nothing will be written to any disk)"
@@ -64,8 +67,8 @@ echo "  new vbmeta_a: $(stat -c %s "$OUT/vbmeta_a.img") bytes, public key sha1: 
 $AVBTOOL info_image --image "$OUT/vbmeta_a.img" | grep -E "Partition Name" | tr -s ' ' | tr '\n' ',' ; echo
 DIG=$($AVBTOOL calculate_vbmeta_digest --image "$OUT/vbmeta_a.img" --hash_algorithm sha256)
 SZ=$(stat -c %s "$OUT/vbmeta_a.img")
-{ echo "androidboot.vbmeta.digest=$DIG"; echo "androidboot.vbmeta.size=$SZ"; echo "androidboot.vbmeta.hash_alg=sha256"; echo "androidboot.vbmeta.avb_version=1.0"; } > avb/vbmeta-bootconfig.txt
-echo "  boot settings for stage 4 saved in avb/vbmeta-bootconfig.txt"
+{ echo "androidboot.vbmeta.digest=$DIG"; echo "androidboot.vbmeta.size=$SZ"; echo "androidboot.vbmeta.hash_alg=sha256"; echo "androidboot.vbmeta.avb_version=1.0"; } > work/vbmeta-bootconfig.txt
+echo "  boot settings for stage 4 saved in work/vbmeta-bootconfig.txt"
 
 [ -n "$DRYRUN" ] && { echo "DRY RUN finished - files are in $GBOS/$OUT, nothing was written."; exit 0; }
 
@@ -80,4 +83,4 @@ cmp "$OUT/vendor.img" <(dd if="$SSDSUP" bs=4M iflag=skip_bytes,count_bytes skip=
 cmp -n "$SZ" "$OUT/vbmeta_a.img" "$SSDVBM" && echo "  vbmeta_a read-back OK" || { echo "  VBMETA READ-BACK FAILED"; exit 1; }
 echo
 echo "DONE. Android partitions are now signed with your key; the boot state is still 'orange' (stage 4 changes that)."
-echo "Reboot and check it still starts. If it does not: sudo bash bm-vendor.sh   (restores the old, unverified setup)."
+echo "Reboot and check it still starts. If it does not: sudo bash scripts/bm-vendor.sh   (restores the old, unverified setup)."

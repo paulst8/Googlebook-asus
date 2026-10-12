@@ -1,14 +1,24 @@
+# your settings and secrets
+bm.conf
+bm.conf.bak
 *.pem
+*.key
+
+# downloads and large working files made by the scripts
+*.zip
 *.img
 *.bin
 *.raw
-*.zip
+*.tar
 lapis*
-work/
+aosp_cf*
 parts/
 super/
 unpacked/
+work/
 fw-extra/
+lpunpack.py
 backup-*
 nvme-*gpt-backup*
+*.log
 __pycache__/

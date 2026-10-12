@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-label="Googlebook OS on a regular laptop">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a73e8"/><stop offset="1" stop-color="#34a853"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="260" rx="18" fill="url(#g)"/>
+  <g transform="translate(90,70)" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="0" y="0" width="150" height="96" rx="8"/>
+    <path d="M-18 112h186"/>
+    <path d="M45 48l22 22 38-40"/>
+  </g>
+  <text x="300" y="118" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="700" fill="#fff">Googlebook OS</text>
+  <text x="300" y="168" font-family="Arial, Helvetica, sans-serif" font-size="32" fill="#e8f0fe">on a regular Intel laptop</text>
+  <text x="300" y="206" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#cfe3ff">unofficial scripts and a step-by-step guide</text>
+</svg>

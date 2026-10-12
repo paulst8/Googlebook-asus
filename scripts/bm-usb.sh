@@ -1,11 +1,14 @@
 #!/bin/bash
 # bm-usb.sh - prepare the USB stick for running Googlebook OS on real hardware.
 # *** ERASES THE WHOLE USB STICK. *** It only ever touches the one device whose serial number you pass
-# (default serial: YOUR_STICK_SERIAL). It refuses anything that is not a USB disk.
-# Run:  sudo bash bm-usb.sh          (add  DRYRUN=1  to only print what it would do)
+# (default: the stick chosen in bm-configure.sh). It refuses anything that is not a USB disk.
+# Run:  sudo bash scripts/bm-usb.sh          (add  DRYRUN=1  to only print what it would do)
 set -euo pipefail
 GBOS=${GBOS:-$PWD}
-SERIAL="${1:-YOUR_STICK_SERIAL}"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
+SERIAL="${1:-${STICK_SERIAL:-}}"
+[ -n "$SERIAL" ] || { echo "No stick serial: run  bash scripts/bm-configure.sh  first (or pass the serial as the first argument)"; exit 1; }
 USERDATA_GIB=${USERDATA_GIB:-48}   # user-data area on the stick; it is only used if you boot from the stick. On a 32 GB stick use USERDATA_GIB=4
 DRYRUN=${DRYRUN:-}
 TARGET_IMG=${TARGET_IMG:-}          # testing only: a file instead of a real stick
@@ -14,7 +17,7 @@ TARGET_IMG=${TARGET_IMG:-}          # testing only: a file instead of a real sti
 for t in sgdisk wipefs mkfs.vfat grub-install python3 udevadm lsblk blockdev partprobe; do
   command -v $t >/dev/null || { echo "missing tool: $t"; exit 1; }; done
 [ -d /usr/lib/grub/x86_64-efi ] || { echo "missing GRUB EFI files:  sudo apt install grub-efi-amd64-bin"; exit 1; }
-for f in lapis.bin gb.raw bm_gpt.py; do [ -e "$GBOS/$f" ] || { echo "missing $GBOS/$f"; exit 1; }; done
+for f in lapis.bin gb.raw; do [ -e "$GBOS/$f" ] || { echo "missing $GBOS/$f - run scripts/bm-prepare.sh first"; exit 1; }; done
 
 # ---- find the stick by serial number, and only if it is a USB disk
 DEV=""
@@ -39,8 +42,8 @@ echo "Target: $DEV   serial $SERIAL   $((SECT*512/1000000000)) GB"
 [ -z "$TARGET_IMG" ] && lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
 
 # ---- build the partition plan from the pristine Googlebook image
-PLAN=$(mktemp); python3 "$GBOS/bm_gpt.py" plan "$GBOS/lapis.bin" > "$PLAN"
-LAST=$(python3 "$GBOS/bm_gpt.py" last "$GBOS/lapis.bin")
+PLAN=$(mktemp); python3 "$LIB/bm_gpt.py" plan "$GBOS/lapis.bin" > "$PLAN"
+LAST=$(python3 "$LIB/bm_gpt.py" last "$GBOS/lapis.bin")
 al() { echo $(( ($1 + 2047) / 2048 * 2048 )); }
 ESP_S=$(al "$LAST");               ESP_E=$((ESP_S + 2097152 - 1))     # 1 GiB boot partition
 LOG_S=$((ESP_E + 1));              LOG_E=$((LOG_S + 524288 - 1))      # 256 MiB raw log area
@@ -73,7 +76,7 @@ fi
 sgdisk --zap-all "$DEV" >/dev/null 2>&1 || true
 sgdisk "${ARGS[@]}" "$DEV" >/dev/null
 [ -z "$TARGET_IMG" ] && { partprobe "$DEV" || true; udevadm settle; }
-python3 "$GBOS/bm_gpt.py" verify "$DEV" <(grep -v -P '\tuserdata$' "$PLAN") && echo "partition table verified"
+python3 "$LIB/bm_gpt.py" verify "$DEV" <(grep -v -P '\tuserdata$' "$PLAN") && echo "partition table verified"
 
 # ---- 2. copy the Android partitions (same sector positions as the source image)
 cp_part() {  # $1=source file  $2=start  $3=end  $4=label
@@ -102,4 +105,4 @@ M=$(mktemp -d); mount "$ESPDEV" "$M"
 grub-install --target=x86_64-efi --efi-directory="$M" --boot-directory="$M/boot" --removable --no-nvram --no-uefi-secure-boot >/dev/null
 mkdir -p "$M/gbos"; sync; umount "$M"; rmdir "$M"
 echo
-echo "DONE. Next:  sudo bash bm-boot.sh   (puts the kernel, ramdisk and boot menu on the stick)"
+echo "DONE. Next:  sudo bash scripts/bm-boot.sh   (puts the kernel, ramdisk and boot menu on the stick)"

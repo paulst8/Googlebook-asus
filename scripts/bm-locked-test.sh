@@ -1,15 +1,18 @@
 #!/bin/bash
-# bm-locked-test.sh - add a THIRD Googlebook OS entry to Ubuntu's boot menu: "LOCKED / yellow (TEST)".
-# A TEST of how Android behaves when told "locked + verified with a custom key (yellow)". Run it AFTER bm-sign.sh.
+# bm-locked-test.sh - add a "Googlebook OS - LOCKED" entry to Ubuntu's boot menu.
+# Tells Android "the bootloader is locked and the system is verified with a custom key". Run it AFTER bm-sign.sh.
+# The boot state Android is told is "green" by default (set BOOT_STATE=yellow to report a custom-key state instead).
 # NOTE: nothing before Android checks GRUB/kernel/initrd, so this label is not backed by a real secure-boot chain yet (that needs
 # UEFI Secure Boot). Use it for testing only; keep your normal entry as the default.
 # It copies the boot settings Ubuntu already uses (like bm-verified.sh) (/boot/gbos/initrd.img), and adds what a real bootloader would pass to Android:
 # the fingerprint (digest) of the signed vbmeta_a that is on the SSD, its size, and the dm-verity mode "enforcing".
-# Difference to bm-verified.sh: boot state yellow + locked (+ flash.locked=1). If verification fails Android will refuse to boot
+# Difference to bm-verified.sh: boot state green/yellow + locked (+ flash.locked=1). If verification fails Android will refuse to boot
 # or reboot: then pick your normal entry (nothing is written to the disks by this script).
-# Run:    cd ~/gbos && sudo bash bm-locked-test.sh          Undo:  sudo rm /etc/grub.d/42_googlebook_locked /boot/gbos/initrd-locked.img && sudo update-grub
+# Run:    cd ~/gbos && sudo bash scripts/bm-locked-test.sh          Undo:  sudo rm /etc/grub.d/42_googlebook_locked /boot/gbos/initrd-locked.img && sudo update-grub
 set -euo pipefail
 GBOS=${GBOS:-$PWD}; cd "$GBOS"
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 DRYRUN=${DRYRUN:-}
 GB=${GB_DIR:-/boot/gbos}
 [ -z "$DRYRUN" ] && { [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }; }
@@ -18,11 +21,11 @@ GB=${GB_DIR:-/boot/gbos}
 # ---- the signed vbmeta_a that is really on the SSD (so the numbers always match what Android will read)
 if [ -n "${VBMETA_IMG:-}" ]; then VB="$VBMETA_IMG"; else VB=$( { blkid -t PARTLABEL=vbmeta_a -o device | grep nvme; blkid -t PARTLABEL=vbmeta_a -o device; } | head -1 ); fi
 [ -n "$VB" ] || { echo "vbmeta_a partition not found"; exit 1; }
-PUB=$(python3 avb/avbtool.py info_image --image "$VB" | sed -n 's/^Public key (sha1): *//p')
-FLG=$(python3 avb/avbtool.py info_image --image "$VB" | sed -n 's/^Flags: *//p' | head -1)
-[ "$FLG" = "0" ] || { echo "vbmeta_a has flags=$FLG (verification still disabled) - run  sudo bash bm-sign.sh  first"; exit 1; }
-[ "$PUB" != "76b0c125b33c7757e0695f02e820553890f57585" ] || { echo "vbmeta_a is still signed by Google, not by your key - run  sudo bash bm-sign.sh  first"; exit 1; }
-DIG=$(python3 avb/avbtool.py calculate_vbmeta_digest --image "$VB" --hash_algorithm sha256)
+PUB=$(python3 "$LIB/avbtool.py" info_image --image "$VB" | sed -n 's/^Public key (sha1): *//p')
+FLG=$(python3 "$LIB/avbtool.py" info_image --image "$VB" | sed -n 's/^Flags: *//p' | head -1)
+[ "$FLG" = "0" ] || { echo "vbmeta_a has flags=$FLG (verification still disabled) - run  sudo bash scripts/bm-sign.sh  first"; exit 1; }
+[ "$PUB" != "76b0c125b33c7757e0695f02e820553890f57585" ] || { echo "vbmeta_a is still signed by Google, not by your key - run  sudo bash scripts/bm-sign.sh  first"; exit 1; }
+DIG=$(python3 "$LIB/avbtool.py" calculate_vbmeta_digest --image "$VB" --hash_algorithm sha256)
 SZ=$(python3 - "$VB" <<'PY'
 import struct, sys
 d = open(sys.argv[1], 'rb').read(256)
@@ -33,9 +36,9 @@ echo "vbmeta_a on the SSD: your key $PUB, digest $DIG, size $SZ"
 
 # ---- new ramdisk file = the current one with its boot settings (bootconfig) extended
 OUTF=${OUT_INITRD:-$GB/initrd-locked.img}
-python3 -I - "$GB/initrd.img" "$OUTF.new" "$DIG" "$SZ" <<'PY'
+python3 -I - "$GB/initrd.img" "$OUTF.new" "$DIG" "$SZ" "${BOOT_STATE:-green}" <<'PY'
 import struct, sys
-src, dst, dig, sz = sys.argv[1:]
+src, dst, dig, sz, state = sys.argv[1:]
 d = open(src, 'rb').read()
 assert d.endswith(b'#BOOTCONFIG\n'), 'no bootconfig at the end of the ramdisk'
 size, csum = struct.unpack('<II', d[-20:-12])
@@ -47,7 +50,7 @@ drop += ('androidboot.verifiedbootstate', 'androidboot.vbmeta.device_state', 'an
 lines = [l for l in lines if not l.startswith(drop)]
 lines += [f'androidboot.vbmeta.digest={dig}', f'androidboot.vbmeta.size={sz}', 'androidboot.vbmeta.hash_alg=sha256',
           'androidboot.vbmeta.avb_version=1.4', 'androidboot.veritymode=enforcing',
-          'androidboot.verifiedbootstate=green', 'androidboot.vbmeta.device_state=locked', 'androidboot.flash.locked=1']
+          f'androidboot.verifiedbootstate={state}', 'androidboot.vbmeta.device_state=locked', 'androidboot.flash.locked=1']
 c = ('\n'.join(lines) + '\n').encode(); c += b'\0' * (-len(c) % 4)
 open(dst, 'wb').write(head + c + struct.pack('<II', len(c), sum(c) & 0xffffffff) + b'#BOOTCONFIG\n')
 print('  boot settings now:'); [print('   ', l) for l in lines]
@@ -65,7 +68,7 @@ cat > /etc/grub.d/42_googlebook_locked <<GRUBS
 # generated by bm-verified.sh - do not edit by hand
 GB=\$(grub-mkrelpath /boot/gbos)
 cat <<GRUBEOF
-menuentry "Googlebook OS - LOCKED / yellow (TEST)" --class android --class os {
+menuentry "Googlebook OS - LOCKED" --class android --class os {
     insmod part_gpt
     insmod ext2
     search --no-floppy --file --set=root \$GB/kernel
@@ -76,5 +79,5 @@ GRUBEOF
 GRUBS
 chmod +x /etc/grub.d/42_googlebook_locked
 update-grub 2>&1 | tail -4
-echo "DONE. Reboot and pick 'Googlebook OS - LOCKED / yellow (TEST)' in Ubuntu's boot menu (your other entries are unchanged)."
+echo "DONE. Reboot and pick 'Googlebook OS - LOCKED' in Ubuntu's boot menu (your other entries are unchanged)."
 echo "Check afterwards (adb):  adb shell \"getprop | grep -iE 'vbmeta|verity|verifiedboot|flash.locked'\""

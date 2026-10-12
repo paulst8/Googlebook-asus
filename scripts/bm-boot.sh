@@ -1,9 +1,11 @@
 #!/bin/bash
 # bm-boot.sh - put the Googlebook kernel, ramdisk and boot menu on the stick's boot partition (GBOS-ESP).
 # Safe to re-run any time (e.g. to change kernel options). Only touches the GBOS-ESP partition.
-# Run:  sudo bash bm-boot.sh        Extra kernel options:  sudo EXTRA="nomodeset" bash bm-boot.sh   |   BOOT_FROM=usb sudo -E bash bm-boot.sh
+# Run:  sudo bash scripts/bm-boot.sh        Extra kernel options:  sudo EXTRA="nomodeset" bash scripts/bm-boot.sh   |   BOOT_FROM=usb sudo -E bash scripts/bm-boot.sh
 set -euo pipefail
 GBOS=${GBOS:-$PWD}
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 # working display options (verified 2026-10-10: plane-fault flood gone, UI visible). Override with EXTRA="..." (EXTRA="" gives none).
 EXTRA=${EXTRA-xe.max_vfs=0 xe.enable_dpt=0 xe.enable_dsb=0 xe.enable_psr=0 xe.enable_fbc=0 xe.enable_dc=0 xe.enable_panel_replay=0 xe.enable_dmc_wl=0 snd_intel_dspcfg.dsp_driver=1}
 [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
@@ -20,7 +22,9 @@ PK=$(lsblk -no PKNAME "$ESPDEV" | head -1)
 #      into the boot settings.  BOOT_FROM=nvme (default, once bm-nvme.sh has run) uses the SSD with serial $NVME_SERIAL;
 #      BOOT_FROM=usb uses the stick.
 BOOT_FROM=${BOOT_FROM:-nvme}
-NVME_SERIAL=${NVME_SERIAL:-YOUR_SSD_SERIAL}
+NVME_SERIAL=${NVME_SERIAL:-${SSD_SERIAL:-}}
+[ -n "$NVME_SERIAL" ] || [ "${BOOT_FROM:-nvme}" != nvme ] || { echo "SSD_SERIAL is not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
+[ -n "${GPU_ID:-}" ] || { echo "GPU_ID is not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
 if [ "$BOOT_FROM" = nvme ]; then
   ND=""
   for d in /sys/block/nvme*n*; do
@@ -69,8 +73,8 @@ M=$(mktemp -d); mount "$ESPDEV" "$M"
 mkdir -p "$M/gbos" "$M/boot/grub"
 cp "$GBOS/unpacked/boot_a/kernel" "$M/gbos/kernel"
 cp "$TMP/initrd.img" "$M/gbos/initrd.img"
-CMD="earlycon=efifb keep_bootcon ignore_loglevel loglevel=8 printk.time=1 printk.devkmsg=on log_buf_len=4M root=/dev/ram0 firmware_class.path=/vendor/firmware cgroup_disable=pressure binder.impl=rust ia32_emulation=false vsyscall=none xe.force_probe=a7ab panic=0 bootconfig $EXTRA"
-CMDQ="loglevel=3 printk.time=1 log_buf_len=4M root=/dev/ram0 firmware_class.path=/vendor/firmware cgroup_disable=pressure binder.impl=rust ia32_emulation=false vsyscall=none xe.force_probe=a7ab panic=0 bootconfig $EXTRA"
+CMD="earlycon=efifb keep_bootcon ignore_loglevel loglevel=8 printk.time=1 printk.devkmsg=on log_buf_len=4M root=/dev/ram0 firmware_class.path=/vendor/firmware cgroup_disable=pressure binder.impl=rust ia32_emulation=false vsyscall=none xe.force_probe=$GPU_ID panic=0 bootconfig $EXTRA"
+CMDQ="loglevel=3 printk.time=1 log_buf_len=4M root=/dev/ram0 firmware_class.path=/vendor/firmware cgroup_disable=pressure binder.impl=rust ia32_emulation=false vsyscall=none xe.force_probe=$GPU_ID panic=0 bootconfig $EXTRA"
 cat > "$M/boot/grub/grub.cfg" <<CFG
 set timeout=8
 set default=2
