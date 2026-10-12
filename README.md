@@ -9,8 +9,8 @@ Run Google's **Googlebook OS** (Android 17, the successor to ChromeOS) on an ord
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![Platform](https://img.shields.io/badge/platform-Intel%20x86__64-blue)
 ![Tested on](https://img.shields.io/badge/tested%20on-ASUS%20TUF%20F16-informational)
-![License](https://img.shields.io/github/license/paulst8/Googlebook-asus)
-![Last commit](https://img.shields.io/github/last-commit/paulst8/Googlebook-asus)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Docs](https://img.shields.io/badge/docs-step--by--step-success)
 
 [Setup guide](docs/SETUP.md) · [Hardware](docs/HARDWARE.md) · [Locked boot](docs/LOCKED-BOOT.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [How it works](docs/HOW-IT-WORKS.md)
 
