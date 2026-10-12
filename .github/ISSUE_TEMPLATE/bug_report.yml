@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please check [Troubleshooting](https://github.com/paulst8/googlebook-asus/blob/main/docs/TROUBLESHOOTING.md) first. **Never paste your signing key (`avb.pem`).**
+        Please check [Troubleshooting](https://github.com/paulst8/Googlebook-asus/blob/main/docs/TROUBLESHOOTING.md) first. **Never paste your signing key (`avb.pem`).**
   - type: dropdown
     id: step
     attributes:

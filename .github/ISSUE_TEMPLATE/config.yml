@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Setup guide
-    url: https://github.com/paulst8/googlebook-asus/blob/main/docs/SETUP.md
+    url: https://github.com/paulst8/Googlebook-asus/blob/main/docs/SETUP.md
     about: Read the step-by-step guide first.
   - name: Troubleshooting
-    url: https://github.com/paulst8/googlebook-asus/blob/main/docs/TROUBLESHOOTING.md
+    url: https://github.com/paulst8/Googlebook-asus/blob/main/docs/TROUBLESHOOTING.md
     about: Known issues and fixes for common boot problems.
