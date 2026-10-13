@@ -1,13 +1,14 @@
 #!/bin/bash
 # bm-wifi-fw2.sh - find OLD Intel BE200 firmware versions (c104, c105) in the git HISTORY of linux-firmware.
 # The current tree only has c101-c103 and c106+; Googlebook's driver asks for c105 (accepts c101-c105).
-# Run:  cd ~/gbos && bash scripts/bm-wifi-fw2.sh      (needs internet + git in Ubuntu; no sudo; downloads ~100-300 MB of git metadata)
+# Run:  cd ~/gbos && bash scripts/bm-wifi-fw2.sh      (needs internet + git in Ubuntu; no sudo; may download several GB when the server ignores partial-clone filters)
 GBOS=${GBOS:-$PWD}; D="$GBOS/fw-extra"; mkdir -p "$D"; T=$(mktemp -d); got=0
+trap 'rm -rf "$T"' EXIT
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
 [ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 command -v git >/dev/null || { echo "git is missing:  sudo apt install git"; exit 1; }
 for url in https://gitlab.com/kernel-firmware/linux-firmware.git https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git https://github.com/kernel-firmware/linux-firmware.git; do
-  echo "cloning (metadata only) from $url ..."
+  echo "cloning (partial clone requested; server may send full history) from $url ..."
   git clone --filter=blob:none --no-checkout --quiet "$url" "$T/r" 2>/dev/null && break; rm -rf "$T/r"
 done
 [ -d "$T/r/.git" ] || { echo "could not clone from any site - open an issue and include this output"; exit 1; }

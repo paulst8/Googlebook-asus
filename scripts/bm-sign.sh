@@ -28,19 +28,13 @@ SLOT=$(stat -c %s super/vendor_a.img)      # size of the vendor slot inside supe
 
 # ---- 1. get the current vendor image
 if [ -z "$DRYRUN" ]; then
-  SSDSUP=""; SSDVBM=""
-  for d in /sys/block/nvme*n*; do
-    [ -e "$d" ] || continue; n=/dev/$(basename "$d")
-    [ "$(lsblk -dno SERIAL "$n" | tr -d ' ')" = "$SSD_SERIAL" ] || continue
-    source "$LIB/bm-safety.sh"
-    bm_require_ubuntu_disk "$n"
-    for q in "$d"/"$(basename "$d")"p*; do
-      pn=$(udevadm info --query=property --name=/dev/$(basename "$q") | sed -n 's/^ID_PART_ENTRY_NAME=//p')
-      [ "$pn" = super ] && SSDSUP=/dev/$(basename "$q"); [ "$pn" = vbmeta_a ] && SSDVBM=/dev/$(basename "$q")
-    done
-  done
-  [ -n "$SSDSUP" ] && [ -n "$SSDVBM" ] || { echo "No Googlebook super/vbmeta_a on the SSD (serial $SSD_SERIAL) - nothing was written"; exit 1; }
-  VOFF=$(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions as s;print(s(sys.argv[1])["vendor_a"])' "$SSDSUP" "$LIB")
+  source "$LIB/bm-safety.sh"
+  DEV=$(bm_disk_by_serial "$SSD_SERIAL")
+  bm_require_ubuntu_disk "$DEV"
+  SSDSUP="${DEV}p$(bm_partition_number "$DEV" super)"
+  SSDVBM="${DEV}p$(bm_partition_number "$DEV" vbmeta_a)"
+  read -r VOFF VSLOT < <(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions;print(*super_partitions(sys.argv[1], True)["vendor_a"])' "$SSDSUP" "$LIB")
+  [ "$VSLOT" -eq "$SLOT" ] && [ $((VOFF+VSLOT)) -le "$(blockdev --getsize64 "$SSDSUP")" ] || { echo 'Vendor extent mismatch - refusing'; exit 1; }
   dd if="$SSDSUP" of="$OUT/vendor.raw" bs=4M iflag=skip_bytes,count_bytes skip=$VOFF count=$SLOT status=none
 else
   cp work/vendor_bm.img "$OUT/vendor.raw"; echo "(dry run: using work/vendor_bm.img, nothing will be written to any disk)"
@@ -74,6 +68,7 @@ echo "  boot settings for stage 4 saved in work/vbmeta-bootconfig.txt"
 
 [ -n "$DRYRUN" ] && { echo "DRY RUN finished - files are in $GBOS/$OUT, nothing was written."; exit 0; }
 
+[ "$SZ" -le "$(blockdev --getsize64 "$SSDVBM")" ] || { echo "vbmeta image exceeds partition"; exit 1; }
 echo "Will sign vendor and vbmeta on SSD serial $SSD_SERIAL: $SSDSUP, $SSDVBM"
 read -r -p "Type the SSD serial ($SSD_SERIAL) to write: " ANSWER
 [ "$ANSWER" = "$SSD_SERIAL" ] || { echo "Not confirmed - no target partitions written"; exit 1; }

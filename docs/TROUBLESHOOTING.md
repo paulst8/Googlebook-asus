@@ -21,7 +21,7 @@ To see where time goes, connect adb to the laptop and run `bash scripts/bm-boott
 <details>
 <summary><strong>Crash loop of unused security services</strong></summary>
 
-A few services that need Google's security chip keep restarting every few seconds. They do not use noticeable CPU (the setup stops the ones that did). It is harmless but noisy in the logs.
+A few services that need Google's security chip keep restarting every few seconds. They do not use noticeable CPU (the setup stops the ones that did). Repeated crashes can affect responsiveness and security-dependent features; see [phone integration](PHONE-INTEGRATION.md).
 
 </details>
 
@@ -36,10 +36,10 @@ Features that need hardware key protection or attestation (some key-protected se
 
 | Symptom | What to try |
 |---|---|
-| The Googlebook OS entry is missing from the menu | Hold **Shift** or **Esc** at start to show GRUB. If it is not there, run `sudo bash scripts/bm-ubuntu-grub.sh` again with the stick plugged in |
+| The Googlebook OS entry is missing from the menu | Hold **Shift** or **Esc** at start to show GRUB. If it is not there, use `sudo BOOT_SOURCE=local bash scripts/bm-ubuntu-grub.sh` for locally staged boot files, or the default command with the configured USB plugged in |
 | Black screen, or a flicker | Use the "kernel messages on screen" entry to see where it stops. Display options are in `scripts/bm-boot.sh` (`EXTRA`) |
 | It restarts again and again after switching locked/unlocked | The old data can't be opened in the new state. Run `sudo bash scripts/bm-reset-data.sh` |
-| No Wi-Fi | Check `FW_WIFI_BASES` in `bm.conf`, run `bash scripts/bm-wifi-fw.sh`, then rebuild with `sudo bash scripts/bm-vendor.sh` |
+| No Wi-Fi | Check `FW_WIFI_BASES` in `bm.conf`, follow [Wi-Fi repair](WIFI-REPAIR.md), including the explicit firmware-alias option for the tested BE200 |
 | No sound | Check that `bash scripts/bm-configure.sh` found a sound card named `PCH`; see [Hardware](HARDWARE.md) |
 | Android won't start at all | Boot Ubuntu and run `bash scripts/bm-check.sh`. Include its output in an issue |
 
@@ -53,4 +53,4 @@ Features that need hardware key protection or attestation (some key-protected se
 
 ## Asking for help
 
-Open a [bug report](../../../issues/new?template=bug_report.yml) and include your `bm.conf` (it contains your drive serial numbers; remove those lines if you don't want to share them), the step that failed, and the last lines of its output.
+Open a [bug report](https://github.com/paulst8/Googlebook-asus/issues/new?template=bug_report.yml) and include your `bm.conf` (it contains your drive serial numbers; remove those lines if you don't want to share them), the step that failed, and the last lines of its output.

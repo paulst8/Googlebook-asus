@@ -2,8 +2,10 @@
 # bm-ubuntu-grub.sh - put Googlebook OS into Ubuntu's own GRUB menu so the USB stick is NOT needed to boot it.
 # Android itself already lives on the SSD; the stick only held the kernel, the ramdisk and a boot menu. This copies
 # those two files (about 60 MB) into Ubuntu's /boot/gbos and adds the same menu entries to Ubuntu's GRUB.
-# Needs the stick plugged in ONE last time (to copy from). Re-run it (stick plugged in) after every  sudo bash scripts/bm-boot.sh
-# Run:  cd ~/gbos && sudo bash scripts/bm-ubuntu-grub.sh      Undo:  sudo rm -rf /boot/gbos /etc/grub.d/40_googlebook && sudo update-grub
+# Use BOOT_SOURCE=local after BOOT_STAGING=1 bm-boot.sh for USB-free installation.
+# The default source is the configured USB. Re-run after changing boot files.
+# Run from the repository: sudo BOOT_SOURCE=local bash scripts/bm-ubuntu-grub.sh
+# Removal instructions: docs/SETUP.md#undo
 set -euo pipefail
 [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
 GBOS=${GBOS:-$PWD}
@@ -33,7 +35,7 @@ ESP_PARENT=$(lsblk -dnro PKNAME "$ESPDEV")
 
 M=$(mktemp -d); mount -o ro "$ESPDEV" "$M"; trap 'umount "$M" 2>/dev/null; rmdir "$M"' EXIT
 fi
-[ -s "$M/gbos/kernel" ] && [ -s "$M/gbos/initrd.img" ] && [ -s "$M/boot/grub/grub.cfg" ] || { echo "stick has no Googlebook files - run bm-boot.sh first"; exit 1; }
+[ -s "$M/gbos/kernel" ] && [ -s "$M/gbos/initrd.img" ] && [ -s "$M/boot/grub/grub.cfg" ] || { echo "boot source has no Googlebook files - run bm-boot.sh with the matching staging option first"; exit 1; }
 mkdir -p /boot/gbos
 cp "$M/gbos/kernel" /boot/gbos/kernel.new && cp "$M/gbos/initrd.img" /boot/gbos/initrd.img.new
 cmp -s "$M/gbos/kernel" /boot/gbos/kernel.new && cmp -s "$M/gbos/initrd.img" /boot/gbos/initrd.img.new || { echo "copy check failed"; rm -f /boot/gbos/*.new; exit 1; }

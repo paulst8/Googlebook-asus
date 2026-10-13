@@ -2,6 +2,18 @@
 
 All notable changes. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+- Rebuild the fresh-install guide with cloning, complete packages, pinned official download URLs/checksums, serial inspection, USB-free staging and maintenance instructions.
+- Add regression checks for documentation links and referenced scripts.
+
+- USB-free installation, serial-bound Ubuntu/EFI checks, GPT validation and full vendor read-back.
+- Explicit BE200 firmware compatibility aliases and bounded Android-compatible diagnostics.
+- Confirmed companion attestation limitation documented; no native phone-integration fix claimed.
+- Maintenance dry runs no longer alter boot files; finalization preserves recovery files.
+- Optional boot experiments select vbmeta by configured SSD and reject ambiguous labels.
+- Correct setup, Wi-Fi, boot-state and rollback documentation; broaden CI coverage.
+
 ## [0.1.0] - 2026-10-12
 
 First public release.
