@@ -19,7 +19,19 @@ GB=${GB_DIR:-/boot/gbos}
 [ -s "$GB/initrd.img" ] && [ -s "$GB/kernel" ] || { echo "No Googlebook boot files in $GB - run bm-ubuntu-grub.sh first"; exit 1; }
 
 # ---- the signed vbmeta_a that is really on the SSD (so the numbers always match what Android will read)
-if [ -n "${VBMETA_IMG:-}" ]; then VB="$VBMETA_IMG"; else VB=$( { blkid -t PARTLABEL=vbmeta_a -o device | grep nvme; blkid -t PARTLABEL=vbmeta_a -o device; } | head -1 ); fi
+source "$LIB/bm-safety.sh"
+if [ -n "$DRYRUN" ]; then
+  [ -n "${OUT_INITRD:-}" ] && [ -f "${VBMETA_IMG:-}" ] && [ ! -b "$VBMETA_IMG" ] || {
+    echo 'Dry run requires a regular VBMETA_IMG file and explicit OUT_INITRD output'; exit 1;
+  }
+  case "$(realpath -m "$OUT_INITRD")" in /boot/*|/etc/*|/dev/*) echo 'Dry-run output must not be a system path'; exit 1;; esac
+  VB="$VBMETA_IMG"
+else
+  bm_require_boot_host
+  DEV=$(bm_disk_by_serial "$SSD_SERIAL")
+  N=$(bm_partition_number "$DEV" vbmeta_a)
+  VB="${DEV}p$N"
+fi
 [ -n "$VB" ] || { echo "vbmeta_a partition not found"; exit 1; }
 PUB=$(python3 "$LIB/avbtool.py" info_image --image "$VB" | sed -n 's/^Public key (sha1): *//p')
 FLG=$(python3 "$LIB/avbtool.py" info_image --image "$VB" | sed -n 's/^Flags: *//p' | head -1)

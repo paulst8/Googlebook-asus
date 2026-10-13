@@ -30,8 +30,8 @@ A few things in the stock image don't exist on a normal laptop. `scripts/bm-vend
 | `bm-usb.sh` | yes | the stick | Copies Android's partitions to the stick, makes a boot partition |
 | `bm-nvme.sh` | yes | the SSD | Adds Android's partitions in unallocated space, copies the system into them |
 | `bm-wifi-fw.sh`, `bm-wifi-fw2.sh` | no | `fw-extra/` | Download newer Intel Wi-Fi firmware |
-| `bm-vendor.sh` | yes | the SSD | Rebuilds the vendor part and writes it |
-| `bm-boot.sh` | yes | the stick | Writes kernel, ramdisk and boot settings |
+| `bm-vendor.sh` | yes | project files, SSD and configured USB if present | Rebuilds the vendor part and writes it |
+| `bm-boot.sh` | except local staging | stick or `work/boot-stage` | Writes kernel, ramdisk and boot settings |
 | `bm-ubuntu-grub.sh` | yes | `/boot/gbos`, GRUB | Adds Googlebook OS to Ubuntu's menu |
 | `bm-finalize.sh` | yes | GRUB | Tidies the Googlebook menu entries |
 | `bm-sign.sh`, `bm-verified.sh`, `bm-locked-test.sh` | yes | the SSD, GRUB | Verified and locked boot |
@@ -46,3 +46,8 @@ Helper code lives in `scripts/lib/`: a partition-table reader (`bm_gpt.py`), the
 - Scripts that erase something ask you to type a confirmation first.
 - `bm-nvme.sh` only adds partitions in unallocated space and saves your partition table first.
 - Every script says in its header what it touches.
+
+Phone integration fails attestation on the tested port; see [the verified findings](PHONE-INTEGRATION.md).
+Diagnostic scripts (`bm-phone-log`, `bm-wifi-log`, `bm-phone-inspect`) read reports;
+PHONE_DEBUG and WIFI_DEBUG vendor options install bounded writers to the existing
+Android log partitions. No diagnostic script repairs attestation.

@@ -1,18 +1,26 @@
 # Locked boot (optional)
 
-By default Android is told that the bootloader is **unlocked** and skips checking its system partitions. This page shows how to sign the system with **your own key** so Android verifies its partitions and boots as **locked**.
+By default Android is told that the bootloader is **unlocked** and skips checking its system partitions. This page shows how to sign the system with **your own key** for an experimental partition-verification configuration that reports **locked**. Enforcement has not been revalidated by a tamper test.
 
 > [!IMPORTANT]
 > Read [what this does and does not protect](#what-this-does-and-does-not-protect) before you decide it is worth doing.
 
 Do this **after** a normal setup works ([Setup guide](SETUP.md)), and **unplug the USB stick first** so the scripts only see the SSD.
 
+These scripts require the configured Ubuntu SSD and same-disk EFI layout, and
+`bm-ubuntu-grub.sh` must already have disabled cross-disk OS probing. They do not
+repair attestation or native phone integration.
+
 ## Steps
 
+Run from your prepared repository in Ubuntu. The reset below erases Android data.
+Stop if any command fails.
+
 ```bash
+cd ~/gbos
 # 1. Make your private signing key. Keep it safe; never share or upload it.
 mkdir -p ~/gbos-avb-key
-openssl genrsa -out ~/gbos-avb-key/avb.pem 4096
+test ! -e ~/gbos-avb-key/avb.pem && (umask 077; openssl genrsa -out ~/gbos-avb-key/avb.pem 4096)
 chmod 600 ~/gbos-avb-key/avb.pem
 
 # 2. Sign the system partitions with your key
@@ -33,7 +41,7 @@ Restart and pick **Googlebook OS**. Android sets itself up from scratch.
 > [!NOTE]
 > **Why the data reset?** Android ties the encryption keys of your data to the boot state. Data created while the bootloader was reported as unlocked cannot be opened when it is reported as locked, and the other way round. Booting with the wrong data makes Android restart into recovery. So every switch between locked and unlocked needs `bm-reset-data.sh`.
 
-## Check that it worked
+## Inspect the reported boot state
 
 With adb connected to the laptop:
 
@@ -56,11 +64,13 @@ You should see `verifiedbootstate` set to `yellow`, `vbmeta.device_state` set to
 |---|---|
 | `green` | Locked, and everything was verified with the manufacturer's key |
 | `yellow` | Locked, and verified with a **custom** key (your own) |
-| `orange` | **Unlocked**: nothing is verified. The default for this project |
+| `orange` | **Unlocked**; this project disables partition verification by default |
 | `red` | Verification failed |
 
 ## What this does and does not protect
 
-Android now verifies its own system partitions with your key, so a changed system file is detected.
+This experiment is intended to enable Android partition verification with your key.
+Checking boot properties alone does not prove enforcement: that would require a
+controlled tamper test, which has not been repeated in this review.
 
 It does **not** protect the steps before Android. Nothing checks GRUB, the kernel or the ramdisk, so the "locked" label is only a label for those. A real chain of trust needs UEFI **Secure Boot** with a kernel you sign yourself, and this project does not do that yet. Treat locked boot as an experiment, not as a security feature, and don't use Googlebook OS for banking or other sensitive accounts.

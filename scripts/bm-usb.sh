@@ -10,6 +10,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
 SERIAL="${1:-${STICK_SERIAL:-}}"
 [ -n "$SERIAL" ] || { echo "No stick serial: run  bash scripts/bm-configure.sh  first (or pass the serial as the first argument)"; exit 1; }
 USERDATA_GIB=${USERDATA_GIB:-48}   # user-data area on the stick; it is only used if you boot from the stick. On a 32 GB stick use USERDATA_GIB=4
+[[ "$USERDATA_GIB" =~ ^[0-9]+$ ]] && [ "$USERDATA_GIB" -gt 0 ] || { echo "USERDATA_GIB must be a positive integer"; exit 1; }
 DRYRUN=${DRYRUN:-}
 TARGET_IMG=${TARGET_IMG:-}          # testing only: a file instead of a real stick
 
@@ -21,7 +22,10 @@ for f in lapis.bin gb.raw; do [ -e "$GBOS/$f" ] || { echo "missing $GBOS/$f - ru
 
 # ---- find the stick by serial number, and only if it is a USB disk
 DEV=""
-if [ -n "$TARGET_IMG" ]; then DEV="$TARGET_IMG"; else
+if [ -n "$TARGET_IMG" ]; then
+  [ -f "$TARGET_IMG" ] && [ ! -b "$TARGET_IMG" ] || { echo "TARGET_IMG must be a regular test file"; exit 1; }
+  DEV="$TARGET_IMG"
+else
   for d in /sys/block/sd*; do
     [ -e "$d" ] || continue; n=/dev/$(basename "$d")
     p=$(udevadm info --query=property --name="$n")
@@ -43,7 +47,7 @@ echo "Target: $DEV   serial $SERIAL   $((SECT*512/1000000000)) GB"
 [ -z "$TARGET_IMG" ] && lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINTS "$DEV"
 
 # ---- build the partition plan from the pristine Googlebook image
-PLAN=$(mktemp); python3 "$LIB/bm_gpt.py" plan "$GBOS/lapis.bin" > "$PLAN"
+PLAN=$(mktemp); trap 'rm -f "$PLAN"' EXIT; python3 "$LIB/bm_gpt.py" plan "$GBOS/lapis.bin" > "$PLAN"
 LAST=$(python3 "$LIB/bm_gpt.py" last "$GBOS/lapis.bin")
 al() { echo $(( ($1 + 2047) / 2048 * 2048 )); }
 ESP_S=$(al "$LAST");               ESP_E=$((ESP_S + 2097152 - 1))     # 1 GiB boot partition

@@ -541,18 +541,11 @@ if [ "${BUILD_ONLY:-0}" = 1 ]; then
 fi
 
 echo "== 7. write the vendor to the SSD (and the stick, if plugged in)"
-SSDSUP=""; SSDVBM=""
-for d in /sys/block/nvme*n*; do
-  [ -e "$d" ] || continue; n=/dev/$(basename "$d")
-  [ "$(lsblk -dno SERIAL "$n" | tr -d ' ')" = "$SSD_SERIAL" ] || continue
-  source "$LIB/bm-safety.sh"
-  bm_require_ubuntu_disk "$n"
-  for q in "$d"/"$(basename "$d")"p*; do
-    pn=$(udevadm info --query=property --name=/dev/$(basename "$q") | sed -n 's/^ID_PART_ENTRY_NAME=//p')
-    [ "$pn" = super ] && SSDSUP=/dev/$(basename "$q"); [ "$pn" = vbmeta_a ] && SSDVBM=/dev/$(basename "$q")
-  done
-done
-[ -n "$SSDSUP" ] && [ -n "$SSDVBM" ] || { echo "No Googlebook super/vbmeta_a on the SSD (serial $SSD_SERIAL) - stopping, nothing was written"; exit 1; }
+source "$LIB/bm-safety.sh"
+SSD_DEV=$(bm_disk_by_serial "$SSD_SERIAL")
+bm_require_ubuntu_disk "$SSD_DEV"
+SSDSUP="${SSD_DEV}p$(bm_partition_number "$SSD_DEV" super)"
+SSDVBM="${SSD_DEV}p$(bm_partition_number "$SSD_DEV" vbmeta_a)"
 VOFF=$(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions as s;print(s(sys.argv[1])["vendor_a"])' "$SSDSUP" "$LIB")
 write_vendor() {  # $1 = super dev, $2 = vbmeta dev
   local VOFF VSLOT

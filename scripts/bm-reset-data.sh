@@ -12,17 +12,14 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
 SERIAL=${SSD_SERIAL:-}; N=${USERDATA_PART:-}
 [ "$(id -u)" = 0 ] || { echo "run with: sudo bash scripts/bm-reset-data.sh"; exit 1; }
 [ -n "$SERIAL" ] || { echo "SSD_SERIAL is not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
-DEV=$(lsblk -dn -o NAME,SERIAL | awk -v s="$SERIAL" '$2==s{print "/dev/"$1; exit}')
-[ -n "$DEV" ] || { echo "SSD with serial $SERIAL not found"; exit 1; }
 source "$(dirname "${BASH_SOURCE[0]}")/lib/bm-safety.sh"
+DEV=$(bm_disk_by_serial "$SERIAL")
 bm_require_ubuntu_disk "$DEV"
 [ "$(blockdev --getss "$DEV")" = 512 ] || { echo "Only 512-byte logical sectors supported"; exit 1; }
 N=$(bm_partition_number "$DEV" userdata "$N") || exit 1
 P="${DEV}p$N"
 sgdisk -i $N "$DEV" | grep -q "Partition name: 'userdata'" || { echo "partition $N is not 'userdata' - stopping"; exit 1; }
-MD=""; for q in $(lsblk -ln -o NAME "$DEV" | tail -n +2); do
-  [ "$(udevadm info --query=property --name=/dev/$q | sed -n 's/^ID_PART_ENTRY_NAME=//p')" = metadata ] && MD=/dev/$q; done
-[ -n "$MD" ] || { echo "metadata partition not found - stopping"; exit 1; }
+MD="${DEV}p$(bm_partition_number "$DEV" metadata)"
 for x in "$P" "$MD"; do grep -q "^$x " /proc/mounts && { echo "$x is mounted - stopping"; exit 1; }; done
 echo "SSD: $DEV   userdata: $P ($(( $(blockdev --getsize64 "$P")/1073741824 )) GiB)   metadata: $MD"
 echo "This ERASES Android's user data and its old encryption key. Ubuntu and Windows are not touched."

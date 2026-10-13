@@ -30,8 +30,8 @@ or reinstall partitions to address this confirmed provisioning failure.
 
 ## Earlier investigation
 
-The reported pairing timeout is unresolved. Source inspection alone does not
-establish that software KeyMint, attestation, or Wi-Fi is the cause. The installer
+Before the later ADB transcripts, the pairing timeout had no confirmed cause.
+The evidence above now establishes an attestation blocker. The installer
 keeps the Google system/product apps, but replaces hardware security components
 and stops several services that crash on this laptop. Do not blindly restart
 those services or change verified-boot properties as a phone integration fix.

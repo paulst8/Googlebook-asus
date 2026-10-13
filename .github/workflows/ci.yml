@@ -19,7 +19,7 @@ jobs:
       - name: ShellCheck (errors only)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck --severity=error scripts/*.sh
+          shellcheck --severity=error scripts/*.sh scripts/lib/*.sh
       - name: Disk-free safety regressions
         run: python3 -m unittest discover -s tests -v
       - name: Python syntax

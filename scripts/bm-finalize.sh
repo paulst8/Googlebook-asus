@@ -1,9 +1,9 @@
 #!/bin/bash
-# bm-finalize.sh - tidy Ubuntu's boot menu for Googlebook OS and make the LOCKED entry the default.
+# bm-finalize.sh - tidy Ubuntu's boot menu for Googlebook OS and group the optional LOCKED boot entries.
 # What it does (run it in Ubuntu, after bm-locked-test.sh has created /boot/gbos/initrd-locked.img):
 #   1. one clean menu:  "Googlebook OS" (locked, the entry that works with your current data)
 #                       + a submenu "Googlebook OS - other options" (unlocked / verified-only / kernel messages)
-#   2. removes the separate test entries (41_googlebook_verified, 42_googlebook_locked) and leftover files in /boot/gbos
+#   2. removes the separate test entries (41_googlebook_verified, 42_googlebook_locked) (boot images and backups are preserved)
 #   3. does NOT touch your default boot entry or menu time (Ubuntu/Windows menu stays as it is).
 #      Only if you WANT Googlebook OS to start by itself: MAKE_DEFAULT=1 ; shorter menu time: GRUB_TIMEOUT=3
 # It writes NOTHING to the Android disk, so your Android data is untouched.
@@ -14,6 +14,19 @@ GB=${GB_DIR:-/boot/gbos}
 GRUBD=${GRUBD_DIR:-/etc/grub.d}
 DEF=${DEFAULT_FILE:-/etc/default/grub}
 DRYRUN=${DRYRUN:-}
+if [ -n "$DRYRUN" ]; then
+  echo "Would rewrite $GRUBD/40_googlebook and remove the separate verified/locked menu scripts."
+  echo "Would preserve all files in $GB; MAKE_DEFAULT=${MAKE_DEFAULT:-0}."
+  echo 'No files changed.'
+  exit 0
+fi
+GBOS=${GBOS:-$PWD}
+source "$GBOS/bm.conf"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/bm-safety.sh"
+bm_require_boot_host
+if [ -n "${GRUB_TIMEOUT:-}" ]; then
+  [[ "$GRUB_TIMEOUT" =~ ^[0-9]+$ ]] || { echo "GRUB_TIMEOUT must be a nonnegative integer"; exit 1; }
+fi
 [ -n "$DRYRUN" ] || [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
 for f in kernel initrd.img initrd-locked.img; do
   [ -s "$GB/$f" ] || { echo "$GB/$f is missing. Run  sudo bash scripts/bm-locked-test.sh  first."; exit 1; }
@@ -54,12 +67,7 @@ ent() { # title initrd args indent
 mv "$OLD.new" "$OLD"; chmod +x "$OLD"
 rm -f "$GRUBD/41_googlebook_verified" "$GRUBD/42_googlebook_locked"
 
-# ---- 3. clean /boot/gbos: keep only what the menu uses
-KEEP=" kernel initrd.img initrd-locked.img initrd-verified.img cmdline-main cmdline-loud "
-for f in "$GB"/*; do
-  b=$(basename "$f")
-  case "$KEEP" in *" $b "*) ;; *) echo "removing unused $b ($(du -h "$f" | cut -f1))"; rm -rf "$f";; esac
-done
+# Keep boot images and backups: unknown files may be needed for recovery.
 
 # ---- 4. default entry (+ optional menu time)
 if [ "${MAKE_DEFAULT:-0}" = 1 ] && [ -f "$DEF" ]; then
@@ -68,7 +76,7 @@ if [ "${MAKE_DEFAULT:-0}" = 1 ] && [ -f "$DEF" ]; then
 fi
 if [ -n "${GRUB_TIMEOUT:-}" ] && [ -f "$DEF" ]; then
   [ -f "$DEF.bak-gbos" ] || cp "$DEF" "$DEF.bak-gbos"
-  sed -i "s|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=$GRUB_TIMEOUT|" "$DEF"
+  sed -i "s|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=$GRUB_TIMEOUT|" /etc/default/grub.d/99-googlebook.cfg
 fi
 [ -n "$DRYRUN" ] && { echo "DRY RUN finished"; exit 0; }
 update-grub 2>&1 | tail -6

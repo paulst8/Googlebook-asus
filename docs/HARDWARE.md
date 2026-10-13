@@ -2,7 +2,7 @@
 
 ## What the scripts work out for you
 
-`scripts/bm-configure.sh` looks at **your** laptop and writes `bm.conf`, which every other script reads. It never changes your disks.
+`scripts/bm-configure.sh` looks at **your** laptop and writes `bm.conf`, which every other script reads. It writes a local configuration file; it does not change partitions.
 
 | Detected | How | Used for |
 |---|---|---|
@@ -19,7 +19,7 @@ Anything it can't detect falls back to the test laptop's values, and it tells yo
 | Area | State on other laptops |
 |---|---|
 | **CPU / GPU** | Needs an **Intel** GPU supported by the `xe` driver. AMD and NVIDIA-only laptops are not supported |
-| **Display options** | `scripts/bm-boot.sh` turns off several display features (`xe.enable_psr=0` and others) that caused a flickering screen on the test laptop. They are harmless elsewhere, just slightly less efficient. Change `EXTRA` if you want different ones |
+| **Display options** | `scripts/bm-boot.sh` turns off several display features (`xe.enable_psr=0` and others) that caused a flickering screen on the test laptop. Their effects on other GPUs are untested. Change `EXTRA` if you want different ones |
 | **Wi-Fi / Bluetooth** | **Intel** chips only. The firmware is copied from your Ubuntu. Realtek, MediaTek and Qualcomm chips are not handled |
 | **Sound** | The sound setup assumes an Intel HDA card named `PCH` with an analog codec (the test laptop has a Realtek ALC256). Other Intel HDA laptops will probably work; SoundWire or SOF-only laptops will not |
 | **Touchpad, keyboard, battery, USB** | Generic; they worked without changes |
@@ -27,7 +27,7 @@ Anything it can't detect falls back to the test laptop's values, and it tells yo
 | **NVIDIA GPU** | Present but unused |
 
 > [!NOTE]
-> "Probably works" means exactly that: it has not been tried. If you try it, please [report the result](../../../issues/new?template=hardware_report.yml), good or bad.
+> "Probably works" means exactly that: it has not been tried. If you try it, please [report the result](https://github.com/paulst8/Googlebook-asus/issues/new?template=hardware_report.yml), good or bad.
 
 ## If a script can't find your hardware
 

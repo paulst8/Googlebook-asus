@@ -121,7 +121,7 @@ read -r -p "Type the SSD's serial number ($SERIAL) to continue: " ANS
 # ---------------------------------------------------------------- 1. back up the partition table, then add the partitions
 BK="$GBOS/nvme-$SERIAL-gpt-backup-$(date +%Y%m%d-%H%M%S).bin"
 sgdisk --backup="$BK" "$DEV" >/dev/null; echo "partition table backup saved: $BK"
-echo "  (to undo everything:  sudo sgdisk --load-backup=$BK $DEV )"
+echo "Keep this backup privately. Restoring it replaces the entire partition map; see docs/SETUP.md#undo."
 sgdisk -a 1 "${ARGS[@]}" "$DEV" >/dev/null
 # tell the kernel about the NEW partitions only (re-reading the whole table fails while Ubuntu is using this disk)
 partx -a --nr $((NEWBASE+1)):$GK "$DEV" 2>/dev/null || partx -a "$DEV" 2>/dev/null || true
@@ -169,4 +169,4 @@ for item in $IDXMAP; do
 done
 echo
 echo "DONE. Android's partitions are on $DEV (serial $SERIAL)."
-echo "Next:  sudo bash scripts/bm-boot.sh      (use BOOT_STAGING=1 for USB-free setup)"
+echo "Next: build/write vendor, then stage boot files and add GRUB (see docs/SETUP.md)."
