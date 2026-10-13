@@ -1,10 +1,85 @@
-<div align="center">
-
-<img src="docs/assets/banner.svg" alt="Googlebook OS on a regular Intel laptop" width="100%">
-
-# Googlebook OS on a regular laptop
-
-Run Google's **Googlebook OS** (Android 17, the successor to ChromeOS) on an ordinary Intel laptop, next to your existing Ubuntu and Windows.
+<div align="center<div align="center">
+    
+    <img src="docs/assets/banner.svg" alt="Googlebook OS on a regular Intel laptop" width="100%">
+    
+    # Googlebook OS on Bare-Metal Laptops
+    
+    **Status**: Experimental | **Platform**: Intel x86_64 | **License**: MIT | **Docs**: Step-by-Step Guide
+    
+    </div>
+    
+    Googlebook OS on Bare-Metal Laptops is an open-source hardware enablement suite that boots Google's Android 17-based Googlebook OS natively on bare-metal x86_64 laptops alongside existing Ubuntu and Windows installations. By combining automated EROFS filesystem reconstruction, hardware-specific driver injection, and native GRUB2 multi-boot integration, this project provides a seamless, high-performance desktop experience without virtual machine overhead.
+    
+    ---
+    
+    ## Key Capabilities
+    
+    - **Hybrid Image Pipeline**: Bridges Google's Android 17 `lapis` base image with Cuttlefish x86_64 hardware enablement modules for native bare-metal performance.
+    - **Automated EROFS & SELinux Patching**: Reconstructs read-only EROFS vendor images and dynamically updates SELinux security contexts and filesystem attributes (`attr`, `secilc`).
+    - **Host Firmware Injection**: Extracts host Linux Wi-Fi (`iwlwifi`) and Bluetooth firmware directly from the host system into Android vendor overlays.
+    - **Non-Destructive GPT Partitioning**: Safely partitions free NVMe disk space while automatically creating a full primary GPT header backup (`gpt_backup_header.bin`) prior to writing partition modifications.
+    - **Ubuntu GRUB2 Integration**: Registers a clean, dedicated multi-boot entry inside `/etc/grub.d/40_googlebook` for effortless startup OS selection.
+    
+    ---
+    
+    ## System Requirements
+    
+    | Requirement | Specification | Notes |
+    | :--- | :--- | :--- |
+    | **Host OS** | Ubuntu 22.04 / 24.04 LTS or Debian 12 (x86_64) | Uses host GRUB2 as the primary boot manager. |
+    | **Disk Space** | ~32 GB Unallocated GPT Space | Free space on primary internal NVMe SSD or secondary drive. |
+    | **Firmware** | UEFI Mode (Secure Boot Disabled) | Secure Boot must be turned off in BIOS/UEFI settings. |
+    | **Required Host Packages** | `erofs-utils attr secilc zstd xxd binutils gdisk curl python3` | Install via `sudo apt update && sudo apt install -y erofs-utils attr secilc zstd xxd binutils gdisk curl python3`. |
+    
+    ---
+    
+    ## End-to-End Quick Start
+    
+    1. **Install host packages & prepare unallocated disk space**:
+       Install necessary build tools (`sudo apt install -y erofs-utils attr secilc zstd xxd binutils gdisk curl python3`) and shrink an existing partition via GParted or Windows Disk Management to leave ~32 GB unallocated GPT space.
+       2. **Download the two official build archives**:
+          Obtain `gbos-base-*.tar.zst` and `gbos-asus-hw-*.tar.zst` and place them in the project root directory (`~/gbos`).
+          3. **Configure target hardware with `bm-configure.sh`**:
+             Run `sudo ./scripts/bm-configure.sh` to auto-detect NVMe SSD serial numbers, PCI address mappings, Wi-Fi hardware, and storage mode (`NO_USB=1`).
+             4. **Validate and unpack images with `bm-check.sh` and `bm-prepare.sh`**:
+                Run `./scripts/bm-check.sh` to verify SHA256 integrity, followed by `./scripts/bm-prepare.sh` to unpack base components into `build/raw/`.
+                5. **Create Android GPT partitions with `bm-nvme.sh`**:
+                   Run `sudo ./scripts/bm-nvme.sh` to back up primary GPT headers and construct native Android GPT partitions on unallocated disk space.
+                   6. **Flash partitions and build custom vendor image with `bm-flash.sh`, `bm-vendor.sh`, and `bm-wifi-fw.sh`**:
+                      Run `sudo ./scripts/bm-flash.sh`, `sudo ./scripts/bm-vendor.sh`, and `sudo ./scripts/bm-wifi-fw.sh` to flash system binaries, synthesize custom EROFS vendor overlays, and inject host wireless firmware.
+                      7. **Register the GRUB boot entry with `bm-ubuntu-grub.sh`**:
+                         Run `sudo ./scripts/bm-ubuntu-grub.sh` to register Googlebook OS into GRUB (`/etc/grub.d/40_googlebook`) and update boot configuration.
+                         
+                         ---
+                         
+                         ## Script & Tool Reference
+                         
+                         | Script | Purpose / Exact Role |
+                         | :--- | :--- |
+                         | `bm-configure.sh` | Analyzes host hardware (NVMe serial, PCI IDs, firmware) and generates `config.env`. |
+                         | `bm-check.sh` | Validates downloaded image release archives against SHA256 checksum manifests. |
+                         | `bm-prepare.sh` | Extracts raw partition images and kernel modules into `build/raw/`. |
+                         | `bm-nvme.sh` | Backs up primary GPT headers and creates native Android partitions on unallocated SSD space. |
+                         | `bm-flash.sh` | Flashes boot, init_boot, and system images to target NVMe GPT partitions. |
+                         | `bm-vendor.sh` | Builds custom EROFS vendor image with Cuttlefish overlays and SELinux patches. |
+                         | `bm-wifi-fw.sh` | Extracts host Wi-Fi/Bluetooth firmware blobs and injects them into vendor overlays. |
+                         | `bm-ubuntu-grub.sh` | Registers `/etc/grub.d/40_googlebook` boot entry and updates GRUB menu. |
+                         | `bm-lock-boot.sh` | Configures optional custom AVB signing keys and verified boot chain. |
+                         | `bm-phone-Link-fix.sh` | Solves phone link/ADB connectivity and attestation quirks on bare metal. |
+                         
+                         ---
+                         
+                         ## Documentation Guide
+                         
+                         | Document | Focus & Description |
+                         | :--- | :--- |
+                         | [docs/SETUP.md](docs/SETUP.md) | Comprehensive start-to-finish installation manual and storage mode guide. |
+                         | [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) | In-depth technical architecture of the EROFS pipeline, kernel, and GRUB integration. |
+                         | [docs/WIFI-REPAIR.md](docs/WIFI-REPAIR.md) | Guide for extracting and injecting Intel/Realtek host Wi-Fi & Bluetooth firmware binaries. |
+                         | [docs/PHONE-INTEGRATION.md](docs/PHONE-INTEGRATION.md) | Step-by-Step setup for Android Phone Link, ADB debugging, and attestation. |
+                         | [docs/LOCKED-BOOT.md](docs/LOCKED-BOOT.md) | Advanced guide to locking the boot pipeline with custom Android Verified Boot (AVB) keys. |
+                         | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Diagnostic workflows, common boot errors, logcat collection, and hardware fixes. |
+                         Intel laptop, next to your existing Ubuntu and Windows.
 
 ![Status](https://img.shields.io/badge/status-experimental-orange)
 ![Platform](https://img.shields.io/badge/platform-Intel%20x86__64-blue)
