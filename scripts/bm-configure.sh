@@ -54,9 +54,14 @@ say "== Drives =="
 if ! command -v lsblk >/dev/null; then say "lsblk is missing (sudo apt install util-linux)"; exit 1; fi
 SSD_SERIAL=$(choose "SSD that will hold Googlebook OS (needs free, unallocated space)" nvme "${SSD_SERIAL:-}")
 [ -n "$SSD_SERIAL" ] || { say "No SSD chosen. Run this in a terminal, or set SSD_SERIAL=... (find it with: lsblk -d -o NAME,SERIAL,TRAN,MODEL)"; exit 1; }
+if [ "${NO_USB:-0}" = 1 ]; then
+  STICK_SERIAL=""
+  say "USB-free installation selected; all images and boot files stay on the Ubuntu SSD."
+else
 STICK_SERIAL=$(choose "USB stick (it will be ERASED in a later step)" usb "${STICK_SERIAL:-}")
 [ -n "$STICK_SERIAL" ] || { say "No USB stick chosen. Plug it in and run again, or set STICK_SERIAL=..."; exit 1; }
 [ "$SSD_SERIAL" != "$STICK_SERIAL" ] || { say "The SSD and the stick have the same serial - something is wrong."; exit 1; }
+fi
 say "SSD serial:   $SSD_SERIAL"; say "stick serial: $STICK_SERIAL"
 
 # ------------------------------------------------------------------ 2. GPU

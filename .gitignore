@@ -22,3 +22,5 @@ backup-*
 nvme-*gpt-backup*
 *.log
 __pycache__/
+
+*.part

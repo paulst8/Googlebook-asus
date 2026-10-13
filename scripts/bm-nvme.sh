@@ -4,9 +4,9 @@
 # SAFETY: it only ADDS new partitions inside unallocated space. It never changes, formats, moves or resizes an
 # existing partition (Ubuntu, Data, the EFI partition). It saves a backup of the disk's partition table first.
 # It refuses to run unless the disk has the serial number you set and is an NVMe disk.
-# The USB stick stays as the boot menu (it holds the kernel) until bm-ubuntu-grub.sh; the Android partitions are copied to the SSD.
+# Sources are local images; no USB stick is required.
 #
-# Run:  DRYRUN=1 sudo bash scripts/bm-nvme.sh      (shows the plan, writes nothing)
+# Run:  sudo DRYRUN=1 bash scripts/bm-nvme.sh      (shows the plan, writes nothing)
 #       sudo bash scripts/bm-nvme.sh               (does it, after you type the serial number)
 set -euo pipefail
 GBOS=${GBOS:-$PWD}
@@ -14,8 +14,9 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
 [ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 SERIAL=${SERIAL:-${SSD_SERIAL:-}}
 STICK_SERIAL=${STICK_SERIAL:-}
-[ -n "$SERIAL" ] && [ -n "$STICK_SERIAL" ] || { echo "Drive serials are not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
+[ -n "$SERIAL" ] || { echo "Drive serials are not set: run  bash scripts/bm-configure.sh  first"; exit 1; }
 USERDATA_GIB=${USERDATA_GIB:-40}       # wanted size of the Android user-data partition (shrinks automatically if space is short)
+[[ "$USERDATA_GIB" =~ ^[0-9]+$ ]] && [ "$USERDATA_GIB" -ge 16 ] || { echo "USERDATA_GIB must be an integer >= 16"; exit 1; }
 MIN_USERDATA_GIB=16
 DRYRUN=${DRYRUN:-}
 [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
@@ -23,29 +24,36 @@ for t in sgdisk parted partx python3 udevadm lsblk blockdev dd; do command -v $t
 for f in lapis.bin gb.raw; do [ -e "$GBOS/$f" ] || { echo "missing $GBOS/$f - run scripts/bm-prepare.sh first"; exit 1; }; done
 
 # ---------------------------------------------------------------- find the SSD by serial number (names swap between boots)
-DEV=""
-for d in /sys/block/nvme*n*; do
-  [ -e "$d" ] || continue; n=/dev/$(basename "$d")
-  [ "$(lsblk -dno SERIAL "$n" | tr -d ' ')" = "$SERIAL" ] && DEV=$n
-done
-[ -n "$DEV" ] || { echo "No NVMe disk with serial $SERIAL found."; lsblk -d -o NAME,SIZE,TRAN,MODEL,SERIAL; exit 1; }
+source "$LIB/bm-safety.sh"
+DEV=$(bm_disk_by_serial "$SERIAL")
 [ "$(lsblk -dno TRAN "$DEV")" = nvme ] || { echo "$DEV is not NVMe - refusing"; exit 1; }
+[ "$(blockdev --getss "$DEV")" = 512 ] || { echo "Only 512-byte logical sectors are supported - refusing"; exit 1; }
 ROOTSRC=$(findmnt -no SOURCE / || true)
 echo "Target SSD: $DEV  (serial $SERIAL)   Ubuntu root is on: $ROOTSRC"
-case "$ROOTSRC" in "$DEV"p*) ;; *) echo "WARNING: this SSD does not hold the running Ubuntu - double-check the serial before continuing.";; esac
+bm_require_ubuntu_disk "$DEV"
+if lsblk -ln -o PARTLABEL "$DEV" | grep -Eq '^(super|userdata|vbmeta_a|gblog|gbkmsg)$'; then
+  echo "Existing Android partitions found - refusing a duplicate installation"; exit 1
+fi
 
-# ---------------------------------------------------------------- find the USB stick (source of super + vbmeta_a, copied there by bm-usb.sh)
-STICK=""
-for d in /sys/block/sd*; do
-  [ -e "$d" ] || continue; n=/dev/$(basename "$d"); p=$(udevadm info --query=property --name="$n")
-  if grep -qx "ID_BUS=usb" <<<"$p" && grep -qx "ID_SERIAL_SHORT=$STICK_SERIAL" <<<"$p"; then STICK=$n; fi
-done
-[ -n "$STICK" ] || { echo "The Googlebook USB stick ($STICK_SERIAL) must be plugged in - it holds the system image copied by bm-usb.sh."; exit 1; }
-echo "USB stick: $STICK"
+# Copy directly from the prepared local images. No USB intermediary is needed.
 
 # ---------------------------------------------------------------- the partition plan from the pristine image + the biggest free gap
-PLAN=$(mktemp); trap 'rm -f "$PLAN"' EXIT
+PLAN=$(mktemp); FREEFILE=; trap 'rm -f "$PLAN" "$FREEFILE"' EXIT
 python3 "$LIB/bm_gpt.py" plan "$GBOS/lapis.bin" > "$PLAN"
+python3 - "$PLAN" "$GBOS/lapis.bin" "$GBOS/gb.raw" <<'CHECK'
+import os, sys
+rows = [line.rstrip('\n').split('\t') for line in open(sys.argv[1])]
+names = {r[5] for r in rows}
+required = {'userdata', 'super', 'vbmeta_a', 'misc', 'metadata', 'boot_a'}
+if not required <= names:
+    sys.exit('Recovery image is missing required Android partitions')
+for r in rows:
+    if r[5] == 'userdata':
+        continue
+    src = sys.argv[3] if r[5] == 'misc' else sys.argv[2]
+    if (int(r[2]) + 1) * 512 > os.path.getsize(src):
+        sys.exit('Source image is truncated for partition ' + r[5])
+CHECK
 FREEFILE=$(mktemp); parted -m -s "$DEV" unit s print free > "$FREEFILE"
 EXIST=$(sgdisk -p "$DEV" | awk '/^ +[0-9]+ /{print $1}' | sort -n | tail -1); EXIST=${EXIST:-0}
 SECTS=$(blockdev --getsz "$DEV")
@@ -98,7 +106,9 @@ while IFS=$'\t' read -r idx s e t u name; do
   fi
   IDXMAP+="$idx:$n:$name:$s:$e "; NEWIDS+="$n "
 done < "$PLAN"
-GL=$((NEWBASE + 40)); GK=$((NEWBASE + 41))
+MAXIDX=$(awk -F '\t' 'BEGIN {m=0} $1>m {m=$1} END {print m}' "$PLAN")
+GL=$((NEWBASE + MAXIDX + 1)); GK=$((GL + 1))
+[ "$GK" -le 128 ] || { echo "Not enough GPT entry slots for this layout - refusing"; exit 1; }
 ARGS+=(-n "$GL:$LOGS:$((LOGS+524288-1))" -t "$GL:8300" -c "$GL:gblog" -u "$GL:R"
        -n "$GK:$KS:$((KS+131072-1))"   -t "$GK:8300" -c "$GK:gbkmsg" -u "$GK:R")
 echo "Will create $(wc -l < "$PLAN") Googlebook partitions (numbers $((NEWBASE+1))..) + gblog ($GL) + gbkmsg ($GK) on $DEV"
@@ -132,7 +142,7 @@ for item in $IDXMAP; do
   IFS=: read -r idx n name s e <<<"$item"
   [ "$name" = userdata ] && continue
   case "$name" in
-    super|vbmeta_a) SRC="$STICK" ;;                 # copied from the stick (bm-vendor.sh changes them on the SSD afterwards)
+    super|vbmeta_a) SRC="$GBOS/lapis.bin" ;;        # pristine source; bm-vendor patches the installed copy
     misc)           SRC="$GBOS/gb.raw" ;;           # AOSP boot-control block
     *)              SRC="$GBOS/lapis.bin" ;;
   esac
@@ -159,4 +169,4 @@ for item in $IDXMAP; do
 done
 echo
 echo "DONE. Android's partitions are on $DEV (serial $SERIAL)."
-echo "Next:  sudo bash scripts/bm-boot.sh      (points the boot menu on the stick at the SSD)"
+echo "Next:  sudo bash scripts/bm-boot.sh      (use BOOT_STAGING=1 for USB-free setup)"

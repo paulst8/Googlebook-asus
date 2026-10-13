@@ -32,6 +32,8 @@ if [ -z "$DRYRUN" ]; then
   for d in /sys/block/nvme*n*; do
     [ -e "$d" ] || continue; n=/dev/$(basename "$d")
     [ "$(lsblk -dno SERIAL "$n" | tr -d ' ')" = "$SSD_SERIAL" ] || continue
+    source "$LIB/bm-safety.sh"
+    bm_require_ubuntu_disk "$n"
     for q in "$d"/"$(basename "$d")"p*; do
       pn=$(udevadm info --query=property --name=/dev/$(basename "$q") | sed -n 's/^ID_PART_ENTRY_NAME=//p')
       [ "$pn" = super ] && SSDSUP=/dev/$(basename "$q"); [ "$pn" = vbmeta_a ] && SSDVBM=/dev/$(basename "$q")
@@ -71,6 +73,10 @@ SZ=$(stat -c %s "$OUT/vbmeta_a.img")
 echo "  boot settings for stage 4 saved in work/vbmeta-bootconfig.txt"
 
 [ -n "$DRYRUN" ] && { echo "DRY RUN finished - files are in $GBOS/$OUT, nothing was written."; exit 0; }
+
+echo "Will sign vendor and vbmeta on SSD serial $SSD_SERIAL: $SSDSUP, $SSDVBM"
+read -r -p "Type the SSD serial ($SSD_SERIAL) to write: " ANSWER
+[ "$ANSWER" = "$SSD_SERIAL" ] || { echo "Not confirmed - no target partitions written"; exit 1; }
 
 # ---- 4. write (with a backup of the old vbmeta_a)
 B="$GBOS/backup-vbmeta_a-$(date +%Y%m%d-%H%M%S).img"; dd if="$SSDVBM" of="$B" bs=4k status=none; echo "  old vbmeta_a saved: $B"

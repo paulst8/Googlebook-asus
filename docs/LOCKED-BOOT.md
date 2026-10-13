@@ -41,13 +41,13 @@ With adb connected to the laptop:
 adb shell "getprop | grep -iE 'vbmeta|verity|verifiedboot|flash.locked'"
 ```
 
-You should see `verifiedbootstate` set to `green`, `vbmeta.device_state` set to `locked`, `veritymode` set to `enforcing`, and a `vbmeta.digest`. That digest should match the one printed by `bm-sign.sh`.
+You should see `verifiedbootstate` set to `yellow`, `vbmeta.device_state` set to `locked`, `veritymode` set to `enforcing`, and a `vbmeta.digest`. That digest should match the one printed by `bm-sign.sh`.
 
 ## Good to know
 
 - **After every `bm-vendor.sh`** run `bm-sign.sh` and `bm-locked-test.sh` again: `bm-vendor.sh` switches verification off.
 - `bm-verified.sh` is a middle step: verified boot while still reported as unlocked. It is mostly for testing.
-- The reported state is `green` by default. Real bootloaders report `yellow` for a custom key; run `BOOT_STATE=yellow sudo -E bash scripts/bm-locked-test.sh` if you prefer that.
+- The reported state is `yellow` for your custom key. This is supplied by bootconfig; it is not evidence that firmware verified GRUB or the kernel.
 - To go back to unlocked: pick the unlocked entry in the "other options" submenu, after `sudo bash scripts/bm-reset-data.sh`.
 
 ## Boot states in plain words

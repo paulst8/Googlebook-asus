@@ -31,6 +31,7 @@ fi
 [ -n "$DEV" ] || { echo "No USB disk with serial $SERIAL found. Is the stick plugged in?"; lsblk -d -o NAME,SIZE,TRAN,SERIAL; exit 1; }
 if [ -z "$TARGET_IMG" ]; then
   [ "$(lsblk -dno TRAN "$DEV")" = usb ] || { echo "$DEV is not a USB disk - refusing"; exit 1; }
+[ "$(blockdev --getss "$DEV")" = 512 ] || { echo "Only 512-byte logical sectors are supported - refusing"; exit 1; }
   BYTES=$(blockdev --getsize64 "$DEV")
   [ "$BYTES" -ge 28000000000 ] && [ "$BYTES" -le 520000000000 ] || { echo "$DEV has an unexpected size ($BYTES) - refusing"; exit 1; }
   if lsblk -lno MOUNTPOINTS "$DEV" | grep -Eq '^(/|/boot.*|/home.*)$'; then echo "$DEV holds a system mount - refusing"; exit 1; fi

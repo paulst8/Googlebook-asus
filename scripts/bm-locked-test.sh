@@ -1,7 +1,7 @@
 #!/bin/bash
 # bm-locked-test.sh - add a "Googlebook OS - LOCKED" entry to Ubuntu's boot menu.
 # Tells Android "the bootloader is locked and the system is verified with a custom key". Run it AFTER bm-sign.sh.
-# The boot state Android is told is "green" by default (set BOOT_STATE=yellow to report a custom-key state instead).
+# The boot state Android is told is "yellow" by default (custom key; this does not establish a hardware chain of trust).
 # NOTE: nothing before Android checks GRUB/kernel/initrd, so this label is not backed by a real secure-boot chain yet (that needs
 # UEFI Secure Boot). Use it for testing only; keep your normal entry as the default.
 # It copies the boot settings Ubuntu already uses (like bm-verified.sh) (/boot/gbos/initrd.img), and adds what a real bootloader would pass to Android:
@@ -36,7 +36,7 @@ echo "vbmeta_a on the SSD: your key $PUB, digest $DIG, size $SZ"
 
 # ---- new ramdisk file = the current one with its boot settings (bootconfig) extended
 OUTF=${OUT_INITRD:-$GB/initrd-locked.img}
-python3 -I - "$GB/initrd.img" "$OUTF.new" "$DIG" "$SZ" "${BOOT_STATE:-green}" <<'PY'
+python3 -I - "$GB/initrd.img" "$OUTF.new" "$DIG" "$SZ" "${BOOT_STATE:-yellow}" <<'PY'
 import struct, sys
 src, dst, dig, sz, state = sys.argv[1:]
 d = open(src, 'rb').read()

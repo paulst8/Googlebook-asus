@@ -23,6 +23,8 @@ flowchart TD
     I --> J[Restart and pick Googlebook OS]
 ```
 
+For installation without a USB stick, use [USB-FREE.md](USB-FREE.md).
+
 ## Before you start
 
 **You need**
@@ -114,11 +116,11 @@ Copies Android's partitions onto the stick and sets up a small boot partition. A
 ### 4.2 Add Android's partitions to your SSD (adds partitions only)
 
 ```bash
-DRYRUN=1 sudo bash scripts/bm-nvme.sh     # preview the plan first
+sudo DRYRUN=1 bash scripts/bm-nvme.sh     # preview the plan first
 sudo bash scripts/bm-nvme.sh
 ```
 
-The stick must stay plugged in. This only **adds** new partitions in unallocated space. It saves a copy of your partition table first (`nvme-<serial>-gpt-backup-*.bin`). Keep that file.
+The installer now reads the prepared images directly; the stick is not required for this step. This only **adds** new partitions in unallocated space. It saves a copy of your partition table first (`nvme-<serial>-gpt-backup-*.bin`). Keep that file.
 
 ### 4.3 Get newer Wi-Fi firmware
 
@@ -182,4 +184,4 @@ To change kernel options later, plug the stick back in and repeat steps 4.5 and 
 
 - **Boot entry:** `sudo rm -rf /boot/gbos /etc/grub.d/40_googlebook /etc/grub.d/41_googlebook_verified /etc/grub.d/42_googlebook_locked && sudo update-grub`
 - **Android's partitions:** restore the saved partition table with `sudo sgdisk --load-backup=<the backup file> /dev/<your SSD>`. This removes the added partitions and gives you the free space back.
-- Your Windows and Ubuntu installs are never modified by these scripts.
+- Existing OS partitions are intended to be preserved. Ubuntu boot files and GRUB configuration are changed. Restoring a GPT backup replaces the entire partition map; do not do that after other partition changes.

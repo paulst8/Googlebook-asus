@@ -8,15 +8,29 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd); LIB="$HERE/lib"
 [ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
 # working display options (verified 2026-10-10: plane-fault flood gone, UI visible). Override with EXTRA="..." (EXTRA="" gives none).
 EXTRA=${EXTRA-xe.max_vfs=0 xe.enable_dpt=0 xe.enable_dsb=0 xe.enable_psr=0 xe.enable_fbc=0 xe.enable_dc=0 xe.enable_panel_replay=0 xe.enable_dmc_wl=0 snd_intel_dspcfg.dsp_driver=1}
-[ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
+[ "${BOOT_STAGING:-0}" = 1 ] || [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
 for f in unpacked/boot_a/kernel unpacked/init_boot_a/ramdisk unpacked/vendor_boot_a/bootconfig \
          unpacked/vendor_boot_a/vendor_ramdisk00 unpacked/vendor_boot_a/vendor_ramdisk01 unpacked/vendor_boot_a/vendor_ramdisk02; do
   [ -f "$GBOS/$f" ] || { echo "missing $GBOS/$f"; exit 1; }; done
 
+BOOT_STAGING=${BOOT_STAGING:-0}
+if [ "$BOOT_STAGING" = 1 ]; then
+  [ "${BOOT_FROM:-nvme}" = nvme ] || { echo "Local staging requires BOOT_FROM=nvme"; exit 1; }
+  ESPDEV="local staging"
+else
 # ---- find the boot partition, and make sure it is on a USB disk
 ESPDEV=$(blkid -L GBOS-ESP || true); [ -b "${ESPDEV:-}" ] || { echo "No GBOS-ESP partition found - run bm-usb.sh first, with the stick plugged in."; exit 1; }
+[ -n "${STICK_SERIAL:-}" ] || { echo "STICK_SERIAL required in bm.conf"; exit 1; }
+ESP_PARENT=$(lsblk -dnro PKNAME "$ESPDEV")
+[ "$(lsblk -dnro TRAN "/dev/$ESP_PARENT")" = usb ] &&
+[ "$(lsblk -dnro SERIAL "/dev/$ESP_PARENT" | tr -d ' ')" = "$STICK_SERIAL" ] || {
+  echo "GBOS-ESP does not belong to the configured USB - refusing"; exit 1;
+}
+
 PK=$(lsblk -no PKNAME "$ESPDEV" | head -1)
 [ "$(lsblk -dno TRAN /dev/$PK)" = usb ] || { echo "GBOS-ESP is not on a USB disk - refusing"; exit 1; }
+
+fi
 
 # ---- where does Android live?  Android finds its disk by the PCI path of the controller, so we write that path
 #      into the boot settings.  BOOT_FROM=nvme (default, once bm-nvme.sh has run) uses the SSD with serial $NVME_SERIAL;
@@ -31,7 +45,9 @@ if [ "$BOOT_FROM" = nvme ]; then
     [ -e "$d" ] || continue; n=$(basename "$d")
     [ "$(lsblk -dno SERIAL /dev/$n | tr -d ' ')" = "$NVME_SERIAL" ] && ND=$n
   done
-  if [ -n "$ND" ] && lsblk -lno PARTLABEL /dev/$ND | grep -qx gblog; then
+  if [ -n "$ND" ] && { [ "$BOOT_STAGING" = 1 ] || lsblk -lno PARTLABEL /dev/$ND | grep -qx gblog; }; then
+    source "$LIB/bm-safety.sh"
+    bm_require_ubuntu_disk "/dev/$ND"
     REAL=$(readlink -f /sys/block/$ND)
     # Android (ueventd) matches boot_devices against ONLY the first two path parts: PCI root + port, e.g. pci0000:00/0000:00:06.2
     BOOTDEV=$(sed -nE 's#^/sys/devices/(pci[^/]+/[^/]+)/.*#\1#p' <<<"$REAL")
@@ -46,7 +62,7 @@ else
   [ -n "$BOOTDEV" ] || { echo "could not work out the USB controller path from $REAL"; exit 1; }
   echo "Android disk: USB stick /dev/$PK   controller: $BOOTDEV   (the stick must stay in the same USB port)"
 fi
-echo "boot partition: $ESPDEV (on the stick)"
+echo "boot destination: $ESPDEV"
 
 # ---- ramdisk: Googlebook's own ramdisks + our boot settings (bootconfig) appended
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -69,7 +85,20 @@ with open(out, 'wb') as o:
 PY
 
 # ---- copy to the stick and write the boot menu
-M=$(mktemp -d); mount "$ESPDEV" "$M"
+M=""
+cleanup_boot() {
+  if [ "$BOOT_STAGING" != 1 ] && [ -n "$M" ]; then
+    umount "$M" 2>/dev/null || true
+    rmdir "$M" 2>/dev/null || true
+  fi
+  rm -rf "$TMP"
+}
+trap cleanup_boot EXIT
+if [ "$BOOT_STAGING" = 1 ]; then
+  M="$GBOS/work/boot-stage"; mkdir -p "$M"
+else
+  M=$(mktemp -d); mount "$ESPDEV" "$M"
+fi
 mkdir -p "$M/gbos" "$M/boot/grub"
 cp "$GBOS/unpacked/boot_a/kernel" "$M/gbos/kernel"
 cp "$TMP/initrd.img" "$M/gbos/initrd.img"
@@ -105,7 +134,12 @@ menuentry "Googlebook OS - no GPU driver (nomodeset)" {
     initrd /gbos/initrd.img
 }
 CFG
-sync; ls -l "$M/gbos"; umount "$M"; rmdir "$M"
+sync; ls -l "$M/gbos"
+if [ "$BOOT_STAGING" = 1 ]; then
+  echo "Boot files staged. Next: sudo BOOT_SOURCE=local bash scripts/bm-ubuntu-grub.sh"
+  exit 0
+fi
+umount "$M"; rmdir "$M"; M=""
 echo
 echo "DONE.  To try it: shut down, plug the stick into the SAME USB port, press Esc (or F8) at the ASUS logo"
 echo "and pick the USB stick.  Nothing on your Windows or Ubuntu drives is changed."
