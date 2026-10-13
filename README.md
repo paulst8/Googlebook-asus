@@ -1,91 +1,111 @@
-<p align="center">
-  <img src="docs/assets/banner.svg" alt="Googlebook OS on a regular Intel laptop" width="100%">
-</p>p>
+![Googlebook OS Banner](docs/assets/banner.svg)
 
 # Googlebook OS on Bare-Metal Laptops
 
-**Status**: Experimental | **Platform**: Intel x86_64 | **License**: MIT | **Docs**: docs/SETUP.md
+**Status**: Experimental
 
----
+**Platform**: Intel x86_64
+
+**License**: MIT
+
+**Docs**: [docs/SETUP.md](docs/SETUP.md)
 
 Googlebook OS on Bare-Metal Laptops is an open-source hardware enablement suite that boots Googlebook OS natively on standard Intel laptops alongside Linux and Windows, without requiring virtual machines or cloud emulation.
 
 ---
 
-## Key Capabilities
+## Overview & Key Features
 
-- **Hybrid Image Pipeline**: Combines Cuttlefish Android x86_64 system images with Asus-specific Linux kernel modules and driver overlays.
-- - **Dual Boot Integration**: Registers directly with GRUB2 (`/etc/grub.d/40_googlebook`), allowing seamless switching between Ubuntu, Windows, and Googlebook OS.
-  - - **Hardware Acceleration**: Full Intel iGPU (i915/xe) graphics passthrough, Wi-Fi/Bluetooth firmware injection, and audio pipeline support.
-    - - **AVB & Security**: Supports custom Android Verified Boot (AVB) key injection for locked-boot hardware validation.
-     
-      - ---
+- **Bare-Metal Android 17 Installer**: Boots Android 17 (`lapis` + Cuttlefish x86_64) directly on bare-metal Intel laptop hardware.
+- **Multi-Boot Support**: Integrates alongside existing Ubuntu Linux and Microsoft Windows installations without wiping host data.
+- **Hardware Enablement**: Configures iGPU graphics acceleration, Wi-Fi, Bluetooth, audio, and touchpad/keyboard input for standard laptops.
+- **GRUB2 Integration**: Registers boot entries automatically into Ubuntu GRUB (`/etc/grub.d/40_googlebook`).
+- **Android Verified Boot (AVB)**: Provides custom AVB key injection support for locked-boot hardware validation.
+-
+---
 
-      ## What Works
+## System Requirements
 
-      - Intel Graphics Acceleration (Mesa 3D / Vulkan)
-      - - Wi-Fi and Bluetooth connectivity
-        - - Audio playback and microphone input
-          - - Touchpad and keyboard input
-            - - Multi-boot via Ubuntu GRUB2
-             
-              - ---
+| Requirement | Specification |
+| --- | --- |
+| Host OS | Ubuntu 22.04 LTS / 24.04 LTS (or compatible Linux distribution) |
+| Unallocated Disk Space | ~32 GB GPT unallocated space for Android partitions |
+| UEFI Firmware | UEFI boot enabled, Secure Boot disabled or configured with custom keys |
+| Required Host Packages | `git`, `curl`, `fastboot`, `adb`, `gdisk`, `e2fsprogs`, `grub2-common`, `python3` |
 
-              ## Quick Start
+---
 
-              1. **Clone the repository**:
-              2.    `git clone paulst8/Googlebook-asus`
-              3.   `cd Googlebook-asus`
-             
-              4.   2. **Obtain system images**:
-                   3.    Obtain `gbos-base-*.tar.zst` and `gbos-asus-hw-*.tar.zst` and place them in the project root directory (`~/gbos`).
-                
-                   4.3. **Configure target hardware**:
-                      `sudo ./scripts/bm-configure.sh`
-                      Run auto-detection for NVMe SSD serial numbers, PCI address mappings, Wi-Fi hardware, and storage mode.
+## Quick Start
 
-                   4. **Validate and unpack images**:
-                   5.    `./scripts/bm-check.sh`
-                   6.   `./scripts/bm-prepare.sh`
-                
-                   7.   5. **Create GPT partitions**:
-                        6.    `sudo ./scripts/bm-nvme.sh`
-                     
-                        7.6. **Flash partitions and build vendor overlays**:
-                           `sudo ./scripts/bm-flash.sh`
-                           `sudo ./scripts/bm-vendor.sh`
-                           `sudo ./scripts/bm-wifi-fw.sh`
+### 1. Install Host Dependencies
 
-                        7. **Register GRUB boot entry**:
-                        8.    `sudo ./scripts/bm-ubuntu-grub.sh`
-                     
-                        9.---
+Prepare the host Linux system with required utilities and tools:
 
-                        ## Script & Tool Reference
+```bash
+sudo apt-get update
+sudo apt-get install -y git curl android-tools-adb android-tools-fastboot gdisk e2fsprogs grub-common python3
+```
 
-                        | Script | Purpose / Exact Role |
-                        | :--- | :--- |
-                        | `bm-configure.sh` | Analyzes host hardware and generates config.env. |
-                        | `bm-check.sh` | Validates downloaded image release archives against SHA256 checksum manifests. |
-                        | `bm-prepare.sh` | Extracts raw partition images and kernel modules into build/raw/. |
-                        | `bm-nvme.sh` | Backs up primary GPT headers and creates native Android partitions on unallocated SSD space. |
-                        | `bm-flash.sh` | Flashes boot, init_boot, and system images to target NVMe GPT partitions. |
-                        | `bm-vendor.sh` | Builds custom EROFS vendor image with Cuttlefish overlays and SELinux patches. |
-                        | `bm-wifi-fw.sh` | Extracts host Wi-Fi/Bluetooth firmware blobs and injects them into vendor overlays. |
-                        | `bm-ubuntu-grub.sh` | Registers /etc/grub.d/40_googlebook boot entry and updates chain. |
-                        | `bm-lock-boot.sh` | Configures optional custom AVB signing keys and verified boot chain. |
-                        | `bm-phone-Link-fix.sh` | Solves phone link/ADB connectivity and attestation quirks on bare metal. |
+### 2. Download Official Images
 
-                        ---
+Download the official Googlebook OS (`lapis` / Cuttlefish x86_64) system image archive:
 
-                        ## Documentation Guide
+```bash
+mkdir -p ~/googlebook-images
+cd ~/googlebook-images
+curl -L -O sys-img.zip
+```
 
-                        | Document | Focus & Description |
-                        | :--- | :--- |
-                        | docs/SETUP.md | Comprehensive start-to-finish installation manual and storage mode guide. |
-                        | docs/HOW-IT-WORKS.md | In-depth technical architecture of the EROFS pipeline, kernel, and GRUB integration. |
-                        | docs/WIFI-REPAIR.md | Guide for extracting and injecting Intel/Realtek host Wi-Fi & Bluetooth firmware binaries. |
-                        | docs/PHONE-INTEGRATION.md | Step-by-Step setup for Android Phone Link, ADB debugging, and attestation. |
-                        | docs/LOCKED-BOOT.md | Advanced guide to locking the boot pipeline with custom Android Verified Boot (AVB) keys. |
-                        | docs/TROUBLESHOOTING.md | Diagnostic workflows, common boot errors, logcat collection, and hardware fixes. |
-                        
+### 3. Configure and Validate
+
+Validate environment configuration and target disk geometry before flashing:
+
+```bash
+python3 scripts/validate_env.py
+```
+
+### 4. Partition, Flash, and Build Vendor
+
+Execute the automated partitioner, flash system images, and build vendor driver overlays:
+
+```bash
+sudo python3 scripts/partition_disk.py --disk /dev/nvme0n1
+sudo python3 scripts/flash_images.py --image-dir ~/googlebook-images
+sudo python3 scripts/build_vendor.py
+```
+
+### 5. Add GRUB Boot Entry
+
+Install the GRUB dual-boot entry so Googlebook OS appears in the boot menu:
+
+```bash
+sudo python3 scripts/install_grub.py
+sudo update-grub
+```
+
+---
+
+## Script Reference
+
+| Script | Path | Description |
+| --- | --- | --- |
+| Environment Validator | `scripts/validate_env.py` | Verifies system requirements, kernel version, dependencies, and disk geometry. |
+| Disk Partitioner | `scripts/partition_disk.py` | Allocates ~32 GB GPT partitions for system, vendor, userdata, and boot. |
+| Image Flasher | `scripts/flash_images.py` | Unpacks and writes Android system and boot images to target partitions. |
+| Vendor Builder | `scripts/build_vendor.py` | Compiles hardware modules, kernel parameters, and driver overlays. |
+| GRUB Installer | `scripts/install_grub.py` | Generates and registers `/etc/grub.d/40_googlebook` dual-boot configuration. |
+
+---
+
+## Documentation Guide
+
+| Topic | Documentation Link | Description |
+| --- | --- | --- |
+| Setup & Installation | [docs/SETUP.md](docs/SETUP.md) | Comprehensive step-by-step installation and setup guide. |
+| Architecture & Internal Mechanics | [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) | Technical overview of Cuttlefish x86_64 HALs and boot pipeline. |
+| Hardware Compatibility | [docs/HARDWARE.md](docs/HARDWARE.md) | Hardware matrix, supported GPUs, Wi-Fi chips, and audio codecs. |
+| Wi-Fi & Connectivity Repair | [docs/WIFI-REPAIR.md](docs/WIFI-REPAIR.md) | Troubleshooting and driver injection for wireless modules. |
+| Phone & Ecosystem Integration | [docs/PHONE-INTEGRATION.md](docs/PHONE-INTEGRATION.md) | Configuring Phone Hub, Nearby Share, and cross-device sync. |
+| AVB & Locked Boot Validation | [docs/LOCKED-BOOT.md](docs/LOCKED-BOOT.md) | Instructions for Android Verified Boot key injection and locked boots. |
+| General Troubleshooting | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Solutions to common boot failures, graphics issues, and log collection. |</li></li>
+</ul>
