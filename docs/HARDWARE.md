@@ -29,14 +29,6 @@ Anything it can't detect falls back to the test laptop's values, and it tells yo
 > [!NOTE]
 > "Probably works" means exactly that: it has not been tried. If you try it, please [report the result](../../../issues/new?template=hardware_report.yml), good or bad.
 
-## Tested hardware
-
-| Laptop | CPU / GPU | Wi-Fi / BT | Sound | Result | Reporter |
-|---|---|---|---|---|---|
-| ASUS TUF F16 (FX607VUR) | Intel Raptor Lake-P (Iris Xe), PCI ID `a7ab` | Intel BE200 | Realtek ALC256 | Display, Wi-Fi, Bluetooth, sound, webcam work. Cast My Apps does not | @paulst8 |
-
-New rows are added from [hardware reports](../../../issues?q=label%3Ahardware-report).
-
 ## If a script can't find your hardware
 
 - Open `bm.conf` and look at the `FW_*` lines. They are plain text; edit them if the detection missed something.
