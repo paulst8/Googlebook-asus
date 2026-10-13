@@ -14,7 +14,7 @@ Android's kernel and ramdisk are loaded by Ubuntu's GRUB from `/boot/gbos`, toge
 
 A few things in the stock image don't exist on a normal laptop. `scripts/bm-vendor.sh` works around them:
 
-- **No Google security chip (TPM).** The image expects hardware to hold encryption keys. Without it the key service crashed repeatedly, which made the system restart over and over. A software key service from Android's Cuttlefish image replaces it.
+- **No compatible Google security stack.** The image expects hardware to hold encryption keys. Without it the key service crashed repeatedly, which made the system restart over and over. A software key service from Android's Cuttlefish image replaces it.
 - **Firmware for the wrong hardware.** The image carries firmware for Google's laptop, not for yours. The script copies the graphics, Wi-Fi, Bluetooth and Ethernet firmware that your Ubuntu loads.
 - **Sound.** The image's only sound setup is for Google's own laptop's chips, so the script adds one for Intel HDA sound and loads the driver early enough.
 - **Services that crash-loop** without Google's hardware (a protected VM launcher, a charge controller and others) are stopped. Left alone, they kept the system's first process busy and made the whole system lag.

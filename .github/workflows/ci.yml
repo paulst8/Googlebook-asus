@@ -15,11 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Shell syntax
-        run: for f in scripts/*.sh; do bash -n "$f" || exit 1; done
+        run: for f in scripts/*.sh scripts/lib/*.sh; do bash -n "$f" || exit 1; done
       - name: ShellCheck (errors only)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           shellcheck --severity=error scripts/*.sh
+      - name: Disk-free safety regressions
+        run: python3 -m unittest discover -s tests -v
       - name: Python syntax
         run: python3 -m py_compile scripts/lib/*.py
       - name: No hard-coded personal or hardware data

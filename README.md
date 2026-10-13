@@ -42,7 +42,12 @@ flowchart LR
     D --> E[Pick Googlebook OS at startup]
 ```
 
-Googlebook OS is Android, shipped as a disk image for Google's own hardware. These scripts add Android to unused space on your SSD, swap the parts that need Google's security chip for software ones, add the firmware your laptop needs, and put an entry in your boot menu. Your Ubuntu and Windows are not touched. More in [How it works](docs/HOW-IT-WORKS.md).
+Googlebook OS is Android, shipped as a disk image for Google's own hardware. These scripts add Android to unused space on your SSD, swap the parts that need Google's security chip for software ones, add the firmware your laptop needs, and put an entry in your boot menu. Existing OS partitions are preserved; Ubuntu boot files and GRUB configuration are modified. More in [How it works](docs/HOW-IT-WORKS.md).
+
+## USB-free installation
+
+For installation entirely on the Ubuntu SSD, use the [USB-free guide](docs/USB-FREE.md).
+See the [current ASUS review](docs/REVIEW-2026-10-13.md) for fixes and remaining limitations.
 
 ## Quick start
 
@@ -84,3 +89,11 @@ Please tell us, whether it worked or not. Open a [hardware report](../../issues/
 - Android Cuttlefish and AOSP `avbtool`: the software security and graphics parts, and verified-boot signing.
 
 Images are always downloaded directly from Google; nothing from Google or Android's test image is redistributed here. Scripts are released under the [MIT License](LICENSE); `scripts/lib/avbtool.py` is from AOSP (Apache 2.0).
+
+### Phone integration limitation
+
+Native **Cast My Apps** and **Continue On** remain unsupported on this installation.
+ADB captures show companion attestation failures and a provisioning response of
+`Device not registered`, despite successful Nearby transport. The software security
+replacements do not recreate a factory-provisioned Googlebook identity.
+See [verified findings](docs/PHONE-INTEGRATION.md) and [Wi-Fi repair](docs/WIFI-REPAIR.md).

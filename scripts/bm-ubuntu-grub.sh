@@ -6,8 +6,33 @@
 # Run:  cd ~/gbos && sudo bash scripts/bm-ubuntu-grub.sh      Undo:  sudo rm -rf /boot/gbos /etc/grub.d/40_googlebook && sudo update-grub
 set -euo pipefail
 [ "$EUID" -eq 0 ] || { echo "Run with sudo:  sudo bash $0"; exit 1; }
+GBOS=${GBOS:-$PWD}
+[ -f "$GBOS/bm.conf" ] && . "$GBOS/bm.conf"
+# Both root and EFI must be on the selected Ubuntu disk. Never install a bootloader elsewhere.
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$HERE/lib/bm-safety.sh"
+ROOT_SOURCE=$(findmnt -nro SOURCE /)
+ROOT_DISK="/dev/$(lsblk -dnro PKNAME "$ROOT_SOURCE")"
+bm_require_ubuntu_disk "$ROOT_DISK"
+[ -n "${SSD_SERIAL:-}" ] && [ "$(lsblk -dnro SERIAL "$ROOT_DISK" | tr -d ' ')" = "$SSD_SERIAL" ] || {
+  echo "Configured SSD is not the Ubuntu disk"; exit 1;
+}
+EFI_SOURCE=$(findmnt -nro SOURCE /boot/efi) || { echo "EFI partition is not mounted"; exit 1; }
+[ "/dev/$(lsblk -dnro PKNAME "$EFI_SOURCE")" = "$ROOT_DISK" ] || { echo "EFI is on another disk - refusing"; exit 1; }
+[ "$(findmnt -nro SOURCE -T /boot)" = "$ROOT_SOURCE" ] || { echo "Separate /boot is not supported by this path"; exit 1; }
+if [ "${BOOT_SOURCE:-usb}" = local ]; then
+  M="$GBOS/work/boot-stage"
+else
 ESPDEV=$(blkid -L GBOS-ESP || true); [ -b "${ESPDEV:-}" ] || { echo "Plug the stick in (GBOS-ESP not found)."; exit 1; }
+[ -n "${STICK_SERIAL:-}" ] || { echo "STICK_SERIAL required in bm.conf"; exit 1; }
+ESP_PARENT=$(lsblk -dnro PKNAME "$ESPDEV")
+[ "$(lsblk -dnro TRAN "/dev/$ESP_PARENT")" = usb ] &&
+[ "$(lsblk -dnro SERIAL "/dev/$ESP_PARENT" | tr -d ' ')" = "$STICK_SERIAL" ] || {
+  echo "GBOS-ESP does not belong to the configured USB - refusing"; exit 1;
+}
+
 M=$(mktemp -d); mount -o ro "$ESPDEV" "$M"; trap 'umount "$M" 2>/dev/null; rmdir "$M"' EXIT
+fi
 [ -s "$M/gbos/kernel" ] && [ -s "$M/gbos/initrd.img" ] && [ -s "$M/boot/grub/grub.cfg" ] || { echo "stick has no Googlebook files - run bm-boot.sh first"; exit 1; }
 mkdir -p /boot/gbos
 cp "$M/gbos/kernel" /boot/gbos/kernel.new && cp "$M/gbos/initrd.img" /boot/gbos/initrd.img.new
@@ -41,6 +66,11 @@ out.append("cat <<GRUBEOF\n" + body + "GRUBEOF")
 open('/etc/grub.d/40_googlebook', 'w').write('\n'.join(out) + '\n')
 PY
 chmod +x /etc/grub.d/40_googlebook
+echo "Updating GRUB with OS probing disabled; existing Windows data is not accessed."
+mkdir -p /etc/default/grub.d
+PREF=/etc/default/grub.d/99-googlebook.cfg
+[ ! -e "$PREF" ] || cp -a "$PREF" "$PREF.bak"
+printf '%s\n' 'GRUB_DISABLE_OS_PROBER=true' 'GRUB_TIMEOUT_STYLE=menu' 'GRUB_TIMEOUT=8' > "$PREF"
 update-grub 2>&1 | tail -6
 echo; grep -c "Googlebook" /boot/grub/grub.cfg | sed 's/^/Googlebook entries in Ubuntu GRUB: /'
 echo "DONE. Reboot WITHOUT the stick and look for 'Googlebook OS' in the Ubuntu GRUB menu (hold Shift or Esc at start if the menu is hidden)."

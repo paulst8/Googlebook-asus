@@ -77,7 +77,7 @@ def unsparse(source, dest):
         g.truncate()
 
 
-def super_partitions(raw):
+def super_partitions(raw, include_sizes=False):
     """Parse AOSP dynamic-partition (LP) metadata; return {name: byte offset} for single-extent partitions."""
     u = lambda b, o: struct.unpack_from('<I', b, o)[0]
     with open(raw, 'rb') as f:
@@ -94,7 +94,11 @@ def super_partitions(raw):
             name = p[:36].split(b'\0')[0].decode()
             _, start, num, _ = struct.unpack_from('<IIII', p, 36)
             if num == 1:
-                out[name] = extents[start][2] * 512
+                sectors, kind, target, source = extents[start]
+                if kind != 0 or source != 0 or sectors <= 0:
+                    raise ValueError('unsupported dynamic-partition extent: ' + name)
+                value = (target * 512, sectors * 512)
+                out[name] = value if include_sizes else value[0]
         return out
 
 

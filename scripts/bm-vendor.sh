@@ -109,8 +109,15 @@ for p in $FW_ETH; do addglob rtl_nic "$p"; done
 for base in $FW_WIFI_BASES; do
   for f in $( (ls "$FWSRC"; ls "$FWEXTRA" 2>/dev/null) | grep -E "^$base(-c?[0-9]+)?\.ucode(\.zst)?$" | sed 's/\.zst$//' | sort -uV | tail -7); do addfw "$f" || true; done
   for f in $( (ls "$FWSRC"; ls "$FWEXTRA" 2>/dev/null) | grep -E "^$base\.pnvm(\.zst)?$" | sed 's/\.zst$//' | sort -u); do addfw "$f" || true; done
-  top=$(ls "$FWDST" | grep -E "^$base-c(10[0-3])\.ucode$" | sort -V | tail -1)   # link target = newest file the driver can plausibly take (<= c103)
-  if [ -n "$top" ]; then for n in 104 105; do [ -e "$FWDST/$base-c$n.ucode" ] || { ln -s "$top" "$FWDST/$base-c$n.ucode"; setfattr -h -n security.selinux -v "$FWL" "$FWDST/$base-c$n.ucode"; echo "  + $base-c$n.ucode -> $top (symlink, experiment)"; }; done; fi
+  # Optional reproduction of the owner's previously working filename workaround.
+  # This does not manufacture core105 firmware or bypass the driver's API checks.
+  if [ "${WIFI_COMPAT_ALIASES:-0}" = 1 ]; then
+    source "$LIB/bm-wifi-compat.sh"
+    bm_wifi_compat_aliases "$FWDST" "$base"
+    for version in 104 105; do
+      [ ! -L "$FWDST/$base-c$version.ucode" ] || setfattr -h -n security.selinux -v "$FWL" "$FWDST/$base-c$version.ucode"
+    done
+  fi
 done
 echo "  GPU firmware now in vendor: $(ls "$FWDST/i915" "$FWDST/xe" 2>/dev/null | tr '\n' ' ')"
 ls "$FWDST/i915" "$FWDST/xe" 2>/dev/null | grep -q guc || echo "  WARNING: no GPU GuC firmware found - the GPU driver will probably fail (run scripts/bm-configure.sh and check FW_GPU in bm.conf)"
@@ -150,12 +157,12 @@ APEXL=$(label_of "$R/apex/com.android.hardware.cas.apex")
 install -o 0 -g 0 -m 0644 $CF/security/com.android.hardware.gatekeeper.nonsecure.apex "$R/apex/"
 setlabel "$APEXL" "$R/apex/com.android.hardware.gatekeeper.nonsecure.apex"
 put_rc bm-absent-hardware.rc <<'RC'
-# No TPM-based gscd here: keep it from crash-looping.
+# The PC TPM is not a compatible Google GSC; keep gscd from crash-looping.
 on early-init
     stop android.system.desktop.security.gscd
     # trusty_security_vm_launcher aborts (SIGABRT, +crash_dump +flags_health_check) on every start because this property is missing
     setprop desktop.security_vm.vm_image /dev/null
-    # init waits 10 s for /dev/tpm0 (system gscutil.rc post-fs) and this PC has none: give it an empty stand-in so the wait ends at once
+    # Legacy wait workaround for images without an exposed /dev/tpm0. This does not supply TPM or attestation functionality.
     symlink /dev/null /dev/tpm0
 # These services crash-loop every few seconds on this PC (no protected VM / EC / charge hardware) and keep init (PID 1) at ~100% CPU = the lag.
 # Overriding them is blocked (treble boundary) and one early `stop` is undone by later explicit `start`s, so stop them at several points,
@@ -422,6 +429,35 @@ if [ "${LEAN:-1}" = 1 ]; then
   rm -f "$R/etc/init/bm-shot.rc" "$R/etc/init/bm-perf.rc" "$R/etc/bm-perf.sh" "$R/etc/init/bm-log.rc"
   echo "  LEAN build: diagnostics services removed (no logs will be saved to the log partitions)"
 fi
+# Bounded kernel-only Wi-Fi diagnostics; works before account setup or networking.
+if [ "${PHONE_DEBUG:-0}" = 1 ]; then
+  [ "${LEAN:-1}" = 1 ] || { echo 'PHONE_DEBUG requires LEAN=1 to avoid competing log writers'; exit 1; }
+  put_etc bm-phone-debug.sh < "$LIB/bm-phone-debug.sh"
+  put_rc bm-phone-debug.rc <<'RC'
+service bm-phone-debug /system/bin/sh /vendor/etc/bm-phone-debug.sh
+    user root
+    group root shell log readproc system
+    seclabel u:r:shell:s0
+    disabled
+    oneshot
+on property:sys.boot_completed=1
+    start bm-phone-debug
+RC
+  echo '  PHONE_DEBUG: 32 bounded snapshots to gblog, starting at boot completion'
+fi
+if [ "${WIFI_DEBUG:-0}" = 1 ]; then
+  put_rc bm-wifi-log.rc <<'RC'
+service bm-wifi-log /system/bin/sh -c "i=0; while [ $$i -lt 18 ]; do { echo GBOS_WIFI_DEBUG; /system/bin/date; /system/bin/dmesg 2>&1 | /system/bin/grep -iE 'iwl|firmware|cfg80211|wlan|rfkill|wifi|pnvm|microcode' | /system/bin/tail -c 1000000; } > /data/local/tmp/bm-wifi-snapshot.txt; /system/bin/dd if=/data/local/tmp/bm-wifi-snapshot.txt of=/dev/block/by-name/gbkmsg bs=1048576 count=1 conv=sync,fsync; i=$$((i+1)); sleep 10; done"
+    user root
+    group root shell log readproc system
+    seclabel u:r:shell:s0
+    disabled
+    oneshot
+on post-fs-data
+    start bm-wifi-log
+RC
+  echo "  WIFI_DEBUG: filtered kernel log saved to gbkmsg for the first three minutes"
+fi
 # audio ROOT CAUSE (found with the boot capture): the HAL reads /vendor/etc/data/hal_configs/audio_default.xml, which names the sound card
 # "sof-soundwire" (-> card id sofsoundwire, absent on this PC -> "internal card not found" x100 -> audio policy NO_INIT).
 # Point it at this laptop's Realtek card (id PCH) and the HDA_Intel_PCH config folder; overwrite in place so SELinux labels stay.
@@ -485,7 +521,8 @@ build() {
               "-zlz4hc,12 -C262144 -Eztailpacking,fragments,dedupe" \
               "-zlzma,9 -C262144 -Eztailpacking,fragments"; do
     rm -f work/vendor_bm.img
-    mkfs.erofs $OPTS work/vendor_bm.img "$R" >/dev/null 2>&1 || true
+    mkfs.erofs $OPTS work/vendor_bm.img "$R" >/dev/null 2>&1 || continue
+    [ -s work/vendor_bm.img ] || continue
     NEW=$(stat -c %s work/vendor_bm.img); echo "  $OPTS -> $NEW"
     [ "$NEW" -le "$SIZE" ] && return 0
   done; return 1
@@ -498,11 +535,18 @@ fi
 truncate -s "$SIZE" work/vendor_bm.img
 echo "new vendor $NEW bytes fits partition area $SIZE"
 
+if [ "${BUILD_ONLY:-0}" = 1 ]; then
+  echo "BUILD_ONLY: vendor image ready at $GBOS/work/vendor_bm.img; no target partitions written."
+  exit 0
+fi
+
 echo "== 7. write the vendor to the SSD (and the stick, if plugged in)"
 SSDSUP=""; SSDVBM=""
 for d in /sys/block/nvme*n*; do
   [ -e "$d" ] || continue; n=/dev/$(basename "$d")
   [ "$(lsblk -dno SERIAL "$n" | tr -d ' ')" = "$SSD_SERIAL" ] || continue
+  source "$LIB/bm-safety.sh"
+  bm_require_ubuntu_disk "$n"
   for q in "$d"/"$(basename "$d")"p*; do
     pn=$(udevadm info --query=property --name=/dev/$(basename "$q") | sed -n 's/^ID_PART_ENTRY_NAME=//p')
     [ "$pn" = super ] && SSDSUP=/dev/$(basename "$q"); [ "$pn" = vbmeta_a ] && SSDVBM=/dev/$(basename "$q")
@@ -511,14 +555,23 @@ done
 [ -n "$SSDSUP" ] && [ -n "$SSDVBM" ] || { echo "No Googlebook super/vbmeta_a on the SSD (serial $SSD_SERIAL) - stopping, nothing was written"; exit 1; }
 VOFF=$(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions as s;print(s(sys.argv[1])["vendor_a"])' "$SSDSUP" "$LIB")
 write_vendor() {  # $1 = super dev, $2 = vbmeta dev
+  local VOFF VSLOT
+  read -r VOFF VSLOT < <(python3 -I -c 'import sys;sys.path.insert(0,sys.argv[2]);from unpack_cf_x86 import super_partitions;print(*super_partitions(sys.argv[1], True)["vendor_a"])' "$1" "$LIB") || return 1
+  [ "$VSLOT" -eq "$SIZE" ] && [ $((VOFF+VSLOT)) -le "$(blockdev --getsize64 "$1")" ] || {
+    echo "Vendor extent differs from the prepared image or exceeds target - refusing"; return 1;
+  }
   [ "$(dd if="$1" bs=1 skip=$((VOFF+1024)) count=4 status=none | xxd -p)" = "e2e1f5e0" ] || { echo "no EROFS at vendor offset on $1 - skipping it"; return 1; }
   [ "$(dd if="$2" bs=1 count=4 status=none)" = "AVB0" ] || { echo "vbmeta_a on $2 is not AVB - skipping it"; return 1; }
-  dd if=work/vendor_bm.img of="$1" bs=4M seek=$VOFF oflag=seek_bytes conv=notrunc,fsync status=none
-  printf '\x00\x00\x00\x03' | dd of="$2" bs=1 seek=120 conv=notrunc,fsync status=none
+  dd if=work/vendor_bm.img of="$1" bs=4M seek=$VOFF oflag=seek_bytes conv=notrunc,fsync status=none || return 1
+  printf '\x00\x00\x00\x03' | dd of="$2" bs=1 seek=120 conv=notrunc,fsync status=none || return 1
   sync
-  cmp -n 67108864 <(dd if="$1" bs=4M skip=$VOFF iflag=skip_bytes,count_bytes count=67108864 status=none) work/vendor_bm.img \
-    && echo "  wrote $1 - read-back of the first 64 MiB matches" || { echo "  READ-BACK FAILED on $1"; return 1; }
+  cmp -n "$SIZE" <(dd if="$1" bs=4M skip=$VOFF iflag=skip_bytes,count_bytes count="$SIZE" status=none) work/vendor_bm.img \
+    && echo "  wrote $1 - full vendor read-back matches" || { echo "  READ-BACK FAILED on $1"; return 1; }
 }
+echo "Will write vendor and vbmeta on SSD serial $SSD_SERIAL: $SSDSUP, $SSDVBM"
+[ -z "$SUPER_DEV" ] || echo "Also selected USB: $SUPER_DEV, $VBM_DEV"
+read -r -p "Type the SSD serial ($SSD_SERIAL) to write: " ANSWER
+[ "$ANSWER" = "$SSD_SERIAL" ] || { echo "Not confirmed - no target partitions written"; exit 1; }
 write_vendor "$SSDSUP" "$SSDVBM" || exit 1
 if [ -n "$SUPER_DEV" ]; then write_vendor "$SUPER_DEV" "$VBM_DEV" || echo "  (stick copy not updated)"; fi
 echo

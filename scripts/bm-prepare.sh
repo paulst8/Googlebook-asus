@@ -23,6 +23,10 @@ if [ -n "$miss" ]; then
 fi
 for f in "$ZIP" "$CFZIP" "$LIB/bm_gpt.py" "$LIB/unpack_cf_x86.py"; do [ -e "$f" ] || { echo "missing $f - see docs/SETUP.md"; exit 1; }; done
 
+# Verify the pinned recovery download before extracting or reusing its output.
+# MD5 is the legacy published checksum: corruption detection, not a signature.
+printf '%s  %s\n' '38873eac8ff5b060baf229b7bcf7ec05' "$ZIP" | md5sum -c -
+
 # ---- 2. Google's image: unzip to lapis.bin (never modified afterwards)
 if [ ! -s lapis.bin ]; then
   echo "[1/6] unzipping $ZIP"
@@ -53,9 +57,21 @@ done
 # ---- 5. the big 'super' partition -> super/*.img (system, vendor, product, ...)
 if [ ! -s super/vendor_a.img ]; then
   echo "[3/6] unpacking super (takes a few minutes, needs about 25 GB free)"
-  [ -s lpunpack.py ] || curl -fsSL -o lpunpack.py https://raw.githubusercontent.com/unix3dgforce/lpunpack/master/lpunpack.py
+  if ! command -v lpunpack >/dev/null; then
+    if [ ! -s lpunpack.py ]; then
+      curl -fsSL -o lpunpack.py.part https://raw.githubusercontent.com/unix3dgforce/lpunpack/c59b8f3b069c5a8aa438a049fa4a091177172434/lpunpack.py
+      mv lpunpack.py.part lpunpack.py
+    fi
+    printf '%s  %s\n' '600d1cab2fc7de5127fb287f4e2791718db54efb1102d0f365db0d3ec1ccf62e' lpunpack.py | sha256sum -c -
+  fi
   read -r S N < <(part super); dd if=lapis.bin of=super.tmp bs=4M iflag=skip_bytes,count_bytes skip=$((S*512)) count=$((N*512)) status=none
-  mkdir -p super; python3 -I lpunpack.py super.tmp super; rm -f super.tmp
+  mkdir -p super
+  if command -v lpunpack >/dev/null; then
+    lpunpack super.tmp super   # Prefer the AOSP host tool, when installed.
+  else
+    python3 -I lpunpack.py super.tmp super
+  fi
+  rm -f super.tmp
 else echo "[3/6] super/ already unpacked"; fi
 
 # ---- 6. Cuttlefish parts (software security + graphics) -> work/cuttlefish/

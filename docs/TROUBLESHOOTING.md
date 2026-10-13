@@ -5,7 +5,7 @@
 <details open>
 <summary><strong>Cast My Apps and Continue on do not work</strong></summary>
 
-The phone and laptop find each other, but the encrypted channel between them never finishes. The phone waits for the laptop's reply and gives up after about 15 to 20 seconds. Nothing is logged on the laptop to say why, and Wi-Fi and the phone's side look healthy. Pairing again did not help. If you find the cause, please [open an issue](../../../issues/new?template=bug_report.yml).
+ADB captures confirm companion-channel attestation failures: certificate provisioning returns HTTP 444 (`Device not registered`), and the Trusty attestation service is unavailable. Nearby authentication and some payload transfers succeed. No working repair for native Cast My Apps or Continue On has been demonstrated on this port. See [verified findings and diagnostics](PHONE-INTEGRATION.md). Re-pairing or reinstalling does not resolve the registration rejection.
 
 </details>
 
